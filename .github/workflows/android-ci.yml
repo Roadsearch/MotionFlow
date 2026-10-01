@@ -2,10 +2,15 @@ name: Android CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: android-ci-${{ github.ref }}
@@ -15,7 +20,7 @@ jobs:
   build:
     name: Build MotionFlow APK
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -25,27 +30,27 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
-      # Le SDK Android est déjà préinstallé sur les runners Ubuntu.
-      # On ne demande plus le package "tools" (supprimé) : c'était la cause de l'échec.
-      # Si besoin d'un composant précis, décommente et adapte :
-      # - name: Setup Android SDK
-      #   uses: android-actions/setup-android@v3
-      #   with:
-      #     packages: "platform-tools platforms;android-34 build-tools;34.0.0"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle
+      - name: Set up Gradle 9.4.0
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.0"
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Show tool versions
+        run: |
+          java -version
+          gradle --version
+          adb version
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Upload test reports
         if: always()
