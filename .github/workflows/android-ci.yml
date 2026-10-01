@@ -32,6 +32,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Install Android SDK 37
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-37.0 build-tools;37.0.0"
+
       - name: Set up Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
         with:
