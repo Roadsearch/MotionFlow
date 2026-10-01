@@ -8,7 +8,11 @@ plugins {
 
 android {
     namespace = "com.roadsearch.openeditvideo"
-    compileSdk = 36
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 0
+        }
+    }
 
     defaultConfig {
         applicationId = "com.roadsearch.openeditvideo"
