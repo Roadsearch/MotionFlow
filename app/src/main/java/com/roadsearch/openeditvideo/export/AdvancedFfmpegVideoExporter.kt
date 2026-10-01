@@ -21,8 +21,8 @@ class AdvancedFfmpegVideoExporter(private val context: Context) : VideoExporter 
                 uris[session.files.indexOf(file)].toString()
             }
             val stagedState = state.copy(
-                clips = state.clips.map { it.copy(uri = android.net.Uri.parse(replacement.getValue(it.uri.toString()))) },
-                audioClips = state.audioClips.map { it.copy(uri = android.net.Uri.parse(replacement.getValue(it.uri.toString()))) },
+                clips = state.clips.map { it.copy(uri = android.net.Uri.fromFile(replacement.getValue(it.uri.toString()))) },
+                audioClips = state.audioClips.map { it.copy(uri = android.net.Uri.fromFile(replacement.getValue(it.uri.toString()))) },
             )
             val command = FfmpegTimelineCommandBuilder.build(stagedState, output)
             onProgress(0f)
