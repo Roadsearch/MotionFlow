@@ -32,15 +32,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # GitHub's Ubuntu runner already provides Android command-line tools,
-      # platform-tools and common SDK platforms/build-tools.
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=${ANDROID_HOME}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
-          sdkmanager --version
-          adb version
-
       - name: Set up Gradle 9.4.0
         uses: gradle/actions/setup-gradle@v4
         with:
