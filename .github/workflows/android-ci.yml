@@ -2,72 +2,64 @@ name: Android CI
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main]
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
-  group: android-build-${{ github.ref }}
+  group: android-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     name: Build MotionFlow APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Le SDK Android est déjà préinstallé sur les runners Ubuntu.
+      # On ne demande plus le package "tools" (supprimé) : c'était la cause de l'échec.
+      # Si besoin d'un composant précis, décommente et adapte :
+      # - name: Setup Android SDK
+      #   uses: android-actions/setup-android@v3
+      #   with:
+      #     packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
-      - name: Set up Gradle 9.4.0
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.4.0"
 
-      - name: Show tool versions
-        run: |
-          java -version
-          gradle --version
-          adb version
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Run unit tests
-        run: |
-          gradle :app:testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build debug APK
-        run: |
-          gradle :app:assembleDebug --stacktrace
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MotionFlow-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: MotionFlow-test-reports
           path: |
             app/build/reports/tests/**
             app/build/test-results/**
-          if-no-files-found: warn
+          if-no-files-found: ignore
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: MotionFlow-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
