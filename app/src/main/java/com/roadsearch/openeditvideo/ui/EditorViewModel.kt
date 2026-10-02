@@ -19,6 +19,7 @@ import com.roadsearch.openeditvideo.export.VideoExportWorker
 import com.roadsearch.openeditvideo.media.MediaProbe
 import com.roadsearch.openeditvideo.media.MediaEngine
 import com.roadsearch.openeditvideo.model.*
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -32,6 +33,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     @ApplicationContext private val app: Context,

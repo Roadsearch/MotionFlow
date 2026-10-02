@@ -107,7 +107,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
             if (running) {
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = { (progress ?: 0f).coerceIn(0f, 1f) },
+                    progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -127,7 +127,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     }
 }
 
-@OptIn(androidx.media3.common.util.UnstableApi::class)
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun ColumnScope.Preview(context: Context, state: EditorUiState, vm: EditorViewModel) {
     val clip = state.selectedClip()
     Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {

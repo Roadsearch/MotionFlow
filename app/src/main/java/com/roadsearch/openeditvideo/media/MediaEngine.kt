@@ -30,7 +30,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 class MediaEngine(private val context: Context) {
 
     fun mediaItem(uri: Uri, startMs: Long = 0L, endMs: Long? = null): MediaItem {
@@ -193,7 +193,7 @@ class MediaEngine(private val context: Context) {
                     })
                     .build()
 
-                transformer!!.start(composition, output.absolutePath)
+                transformer.start(composition, output.absolutePath)
                 if (!pollingStarted) {
                     pollingStarted = true
                     mainHandler.post(poller)
