@@ -8,7 +8,6 @@ import androidx.media3.effect.Contrast
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.RgbFilter
-import androidx.media3.effect.Saturation
 import androidx.media3.effect.ScaleAndRotateTransformation
 import com.roadsearch.openeditvideo.model.EffectSettings
 import com.roadsearch.openeditvideo.model.VideoFilter
@@ -23,7 +22,7 @@ object GpuEffectFactory {
         }
         if (settings.brightness != 0f) add(Brightness(settings.brightness.coerceIn(-1f, 1f)))
         if (settings.contrast != 0f) add(Contrast(settings.contrast.coerceIn(-1f, 1f)))
-        if (settings.saturation != 1f) add(Saturation(settings.saturation.coerceIn(0f, 2f)))
+        if (settings.saturation != 1f) add(HslAdjustment.Builder().adjustSaturation((settings.saturation.coerceIn(0f, 2f) - 1f) * 100f).build())
         if (settings.hue != 0f) add(HslAdjustment.Builder().adjustHue(settings.hue).build())
         if (settings.blur > 0.01f) add(GaussianBlur(settings.blur.coerceAtLeast(0f)))
         if (opacity < 0.999f) add(AlphaScale(opacity.coerceIn(0f, 1f)))

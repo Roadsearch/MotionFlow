@@ -9,6 +9,7 @@ import androidx.media3.common.util.GlUtil
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BaseGlShaderProgram
+import androidx.media3.effect.GlEffect
 import androidx.media3.common.util.GlProgram
 import com.roadsearch.openeditvideo.model.MaskSettings
 import com.roadsearch.openeditvideo.model.MaskType
@@ -44,7 +45,7 @@ private class MaskShaderProgram(
         val identity = GlUtil.create4x4IdentityMatrix()
         program.setFloatsUniform("uTransformationMatrix", identity)
         program.setFloatsUniform("uTexTransformationMatrix", identity)
-        program.setFloatsUniform("uMaskRect", settings.x.coerceIn(0f,1f), settings.y.coerceIn(0f,1f), settings.width.coerceIn(0.001f,1f), settings.height.coerceIn(0.001f,1f))
+        program.setFloatsUniform("uMaskRect", floatArrayOf(settings.x.coerceIn(0f, 1f), settings.y.coerceIn(0f, 1f), settings.width.coerceIn(0.001f, 1f), settings.height.coerceIn(0.001f, 1f)))
         program.setFloatUniform("uFeather", settings.feather.coerceIn(0f, 0.5f))
         program.setFloatUniform("uMaskType", settings.type.ordinal.toFloat())
         program.setFloatUniform("uInvert", 0f)

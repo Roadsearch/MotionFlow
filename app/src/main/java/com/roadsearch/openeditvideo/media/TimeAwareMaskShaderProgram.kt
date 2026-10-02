@@ -34,7 +34,7 @@ class TimeAwareMaskShaderProgram(
         try {
             val s = settingsAtFrame(presentationTimeUs / 1000L)
             program.use()
-            program.setFloatsUniform("uMaskRect", s.x.coerceIn(0f,1f), s.y.coerceIn(0f,1f), s.width.coerceIn(0.001f,1f), s.height.coerceIn(0.001f,1f))
+            program.setFloatsUniform("uMaskRect", floatArrayOf(s.x.coerceIn(0f, 1f), s.y.coerceIn(0f, 1f), s.width.coerceIn(0.001f, 1f), s.height.coerceIn(0.001f, 1f)))
             program.setFloatUniform("uFeather", s.feather.coerceIn(0f, 0.5f))
             program.setFloatUniform("uMaskType", s.type.ordinal.toFloat())
             program.setFloatUniform("uInvert", 0f)
