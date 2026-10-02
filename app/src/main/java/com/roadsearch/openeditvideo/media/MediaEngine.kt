@@ -93,7 +93,7 @@ class MediaEngine(private val context: Context) {
     }
 
     internal fun effectsForClipForComposition(state: EditorUiState, clip: VideoClip): Effects =
-        Effects(emptyList(), buildCompositionEffects(state, clip))
+        Effects(listOf(constantGainProcessor(clip.volume.coerceIn(0f, 2f))), buildCompositionEffects(state, clip))
 
     private fun buildCompositionEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
         val static = clip.effects.copy(rotation = 0f)

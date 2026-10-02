@@ -437,6 +437,79 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun duplicateSelected() {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        if (isTrackLocked(clip.track)) return
+        val length = TimelineMath.duration(clip, clip.sourceDurationMs.coerceAtLeast(state.durationMs))
+        if (length <= 0L) return
+        record()
+        val copy = clip.copy(id = System.nanoTime(), name = "${clip.name} (copie)", timelineStartMs = clip.timelineStartMs + length)
+        _state.update { s ->
+            val shifted = s.clips.map { c ->
+                if (clip.track == 0 && c.track == 0 && c.id != clip.id && c.timelineStartMs >= clip.timelineStartMs + length) {
+                    c.copy(timelineStartMs = c.timelineStartMs + length)
+                } else c
+            }
+            val index = shifted.indexOfFirst { it.id == clip.id }
+            if (index < 0) s else s.copy(
+                clips = shifted.toMutableList().apply { add(index + 1, copy) },
+                selectedClipId = copy.id,
+                selectedClipIds = setOf(copy.id),
+                durationMs = maxOf(s.durationMs, copy.timelineStartMs + length),
+            )
+        }
+    }
+
+    fun setSelectedVolume(value: Float) {
+        val clip = _state.value.selectedClip() ?: return
+        updateClip(clip.copy(volume = value.coerceIn(0f, 2f)))
+    }
+
+    fun setAudioVolume(value: Float) {
+        if (_state.value.audioClips.isEmpty()) return
+        record()
+        _state.update { s -> s.copy(audioClips = s.audioClips.map { it.copy(volume = value.coerceIn(0f, 2f)) }) }
+    }
+
+    fun removeLastAudio() {
+        if (_state.value.audioClips.isEmpty()) return
+        record()
+        _state.update { it.copy(audioClips = it.audioClips.dropLast(1)) }
+    }
+
+    fun removeLastText() {
+        if (_state.value.textOverlays.isEmpty()) return
+        record()
+        _state.update { it.copy(textOverlays = it.textOverlays.dropLast(1)) }
+    }
+
+    fun importOverlay(uri: Uri, name: String) {
+        runCatching {
+            app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val id = System.nanoTime()
+        val context = app
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val duration = MediaProbe.durationMs(context, uri).takeIf { it > 0L } ?: 5_000L
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                record()
+                _state.update { s ->
+                    val start = s.positionMs
+                    s.copy(
+                        clips = s.clips + VideoClip(
+                            id = id, uri = uri, name = name, endMs = duration, sourceDurationMs = duration,
+                            track = 1, timelineStartMs = start,
+                        ),
+                        selectedClipId = id,
+                        selectedClipIds = setOf(id),
+                        durationMs = maxOf(s.durationMs, start + duration),
+                    )
+                }
+            }
+        }
+    }
+
     fun trimStart() = updateSelected { clip, state ->
         val newStart = state.positionMs
             .let { (it - clip.timelineStartMs + clip.startMs) }
