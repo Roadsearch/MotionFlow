@@ -33,29 +33,27 @@ jobs:
           java-version: "17"
 
       - name: Install Android SDK 37
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: "platforms;android-37.0 build-tools;37.0.0"
 
-      - name: Set up Gradle 9.6.0
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.6.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Show tool versions
         run: |
           java -version
-          gradle --version
+          ./gradlew --version
 
       - name: Run unit tests
-        run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
+        run: ./gradlew :app:testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace --no-daemon
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: MotionFlow-test-reports
           path: |
@@ -64,7 +62,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: MotionFlow-debug-apk
           path: app/build/outputs/apk/debug/*.apk
