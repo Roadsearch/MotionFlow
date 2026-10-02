@@ -12,7 +12,6 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.HslAdjustment
-import androidx.media3.effect.Saturation
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.common.audio.GainProcessor
 import androidx.media3.transformer.Composition
@@ -53,7 +52,7 @@ class MediaEngine(private val context: Context) {
         }
         if (settings.brightness != 0f) add(Brightness(settings.brightness.coerceIn(-1f, 1f)))
         if (settings.contrast != 0f) add(Contrast(settings.contrast.coerceIn(-1f, 1f)))
-        if (settings.saturation != 1f) add(Saturation(settings.saturation.coerceIn(0f, 2f)))
+        if (settings.saturation != 1f) add(HslAdjustment.Builder().adjustSaturation((settings.saturation.coerceIn(0f, 2f) - 1f) * 100f).build())
         if (settings.hue != 0f) add(HslAdjustment.Builder().adjustHue(settings.hue).build())
         AdvancedEffects.color(settings.filter).let(::addAll)
         AdvancedEffects.blur(settings.blur)?.let(::add)

@@ -41,7 +41,7 @@ object FfmpegTimelineCommandBuilder {
             ?: error("La piste V1 est obligatoire pour le backend avancé")
         val baseIndex = indexByClip.getValue(base.clipId)
         val baseDur = seconds(base.durationMs)
-        parts += "[$baseIndex:v]trim=start=${seconds(base.startMs)}:duration=$baseDur,setpts=PTS-STARTPTS[base0]"
+        parts += "[$baseIndex:v]trim=start=${seconds(videoClips.first { it.id == base.clipId }.startMs)}:duration=$baseDur,setpts=PTS-STARTPTS[base0]"
         var current = "base0"
         var nextBase = 1
         val upper = plan.layers.filter { it.clipId != base.clipId }.sortedBy { it.zIndex }
