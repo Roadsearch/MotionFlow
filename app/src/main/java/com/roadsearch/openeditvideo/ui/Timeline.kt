@@ -10,6 +10,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -109,7 +111,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
             }
             Box(Modifier.size(22.dp).clickable { vm.toggleTrackMute(track) }, contentAlignment = Alignment.Center) {
                 Icon(
-                    if (ts.muted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
+                    if (ts.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                     contentDescription = if (ts.muted) "Réactiver le son de la piste" else "Couper le son de la piste",
                     tint = if (ts.muted) TLocked else TMuted.copy(.55f),
                     modifier = Modifier.size(12.dp),

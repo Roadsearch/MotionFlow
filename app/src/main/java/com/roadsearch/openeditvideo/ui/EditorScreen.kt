@@ -14,6 +14,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.LastPage
+import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -64,11 +69,11 @@ fun EditorScreen(vm: EditorViewModel) {
     sheet?.let { tool ->
         ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Panel) {
             when (tool) {
-                Tool.AUDIO -> { SheetTitle("Audio"); SheetAction("Ajouter une piste audio", Icons.Rounded.MusicNote) { pickAudio(); sheet = null }; SheetAction("Couper le son de la vidéo", Icons.Rounded.VolumeOff) { vm.toggleMute(); sheet = null } }
+                Tool.AUDIO -> { SheetTitle("Audio"); SheetAction("Ajouter une piste audio", Icons.Rounded.MusicNote) { pickAudio(); sheet = null }; SheetAction("Couper le son de la vidéo", Icons.AutoMirrored.Rounded.VolumeOff) { vm.toggleMute(); sheet = null } }
                 Tool.TEXT -> { SheetTitle("Texte"); SheetAction("Ajouter un texte à la tête de lecture", Icons.Rounded.TextFields) { textDialog = true; sheet = null } }
                 Tool.EFFECTS, Tool.ADJUST -> EffectsPanel(state, vm)
                 Tool.MORE -> AnimationPanel(vm)
-                else -> { SheetTitle("Actions du clip"); SheetAction("Scinder ici", Icons.Rounded.ContentCut) { vm.split(); sheet = null }; SheetAction("Rogner le début", Icons.Rounded.FirstPage) { vm.trimStart(); sheet = null }; SheetAction("Rogner la fin", Icons.Rounded.LastPage) { vm.trimEnd(); sheet = null }; SheetAction("Supprimer", Icons.Rounded.DeleteOutline) { vm.deleteSelected(); sheet = null } }
+                else -> { SheetTitle("Actions du clip"); SheetAction("Scinder ici", Icons.Rounded.ContentCut) { vm.split(); sheet = null }; SheetAction("Rogner le début", Icons.Rounded.FirstPage) { vm.trimStart(); sheet = null }; SheetAction("Rogner la fin", Icons.AutoMirrored.Rounded.LastPage) { vm.trimEnd(); sheet = null }; SheetAction("Supprimer", Icons.Rounded.DeleteOutline) { vm.deleteSelected(); sheet = null } }
             }
             Spacer(Modifier.navigationBarsPadding().height(16.dp))
         }
@@ -114,8 +119,8 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     Row(Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton({}) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color.White) }
         Column(Modifier.weight(1f)) { Text("Nouveau projet", color = Color.White, style = MaterialTheme.typography.titleMedium); Text("1080p · 30 fps", color = Muted, style = MaterialTheme.typography.labelSmall) }
-        IconButton({ vm.undo() }, enabled = vm.canUndo()) { Icon(Icons.Rounded.Undo, "Annuler", tint = if (vm.canUndo()) Color.White else Muted) }
-        IconButton({ vm.redo() }, enabled = vm.canRedo()) { Icon(Icons.Rounded.Redo, "Rétablir", tint = if (vm.canRedo()) Color.White else Muted) }
+        IconButton({ vm.undo() }, enabled = vm.canUndo()) { Icon(Icons.AutoMirrored.Rounded.Undo, "Annuler", tint = if (vm.canUndo()) Color.White else Muted) }
+        IconButton({ vm.redo() }, enabled = vm.canRedo()) { Icon(Icons.AutoMirrored.Rounded.Redo, "Rétablir", tint = if (vm.canRedo()) Color.White else Muted) }
         IconButton(onImport) { Icon(Icons.Rounded.Add, "Importer", tint = Color.White) }
         Box { IconButton({ setMore(true) }) { Icon(Icons.Rounded.MoreVert, "Plus", tint = Color.White) }; DropdownMenu(more, { setMore(false) }) { DropdownMenuItem({ Text("Importer un média") }, leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) }, onClick = { setMore(false); onImport() }); DropdownMenuItem({ Text("Exporter") }, leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }, enabled = canExport, onClick = { setMore(false); onExport() }) } }
         FilledTonalButton(onExport, enabled = canExport, colors = ButtonDefaults.filledTonalButtonColors(containerColor = Accent, contentColor = Color.White), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Rounded.FileUpload, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Exporter") }
@@ -153,7 +158,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
                 val localTime = (state.positionMs - clip.timelineStartMs + clip.startMs).coerceAtLeast(clip.startMs)
                 val keyframe = clip.keyframesAt(state.positionMs)
                 AndroidView({ PlayerView(it).apply { this.player = player; useController = false } }, modifier = Modifier.aspectRatio(9f / 16f).fillMaxHeight().background(Color.Black, RoundedCornerShape(18.dp)))
-                Row(verticalAlignment = Alignment.CenterVertically) { IconButton({ vm.setPlaying(!state.playing) }) { Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color.White) }; Text(formatTime(state.positionMs), color = Color.White); Text(" / ${formatTime(state.durationMs)}", color = Muted); IconButton(vm::toggleMute) { Icon(if (state.muted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp, null, tint = Color.White) } }
+                Row(verticalAlignment = Alignment.CenterVertically) { IconButton({ vm.setPlaying(!state.playing) }) { Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null, tint = Color.White) }; Text(formatTime(state.positionMs), color = Color.White); Text(" / ${formatTime(state.durationMs)}", color = Muted); IconButton(vm::toggleMute) { Icon(if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, null, tint = Color.White) } }
             }
         }
     }
@@ -184,7 +189,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
         Text("Opacité ${(keyframe.opacity*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.opacity, { vm.setKeyframeProperty(opacity=it) }, valueRange=0f..1f, modifier=Modifier.padding(horizontal=16.dp))
         Text("Les keyframes sont interpolés en temps réel dans la preview.", color=Muted, style=MaterialTheme.typography.labelSmall, modifier=Modifier.padding(horizontal=20.dp, vertical=4.dp))
     }
-    Divider(Modifier.padding(vertical=8.dp), color=Card)
+    HorizontalDivider(Modifier.padding(vertical=8.dp), color=Card)
     Text("Effets Media3", color=Color.White, style=MaterialTheme.typography.titleMedium, modifier=Modifier.padding(horizontal=20.dp)); Text("Rotation ${state.effects.rotation.roundToInt()}°", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(state.effects.rotation, { vm.setEffects(rotation=it) }, valueRange=-180f..180f, modifier=Modifier.padding(horizontal=16.dp)); Text("Contraste ${(state.effects.contrast*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(state.effects.contrast, { vm.setEffects(contrast=it) }, valueRange=-1f..1f, modifier=Modifier.padding(horizontal=16.dp)); Text("Saturation ${(state.effects.saturation*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(state.effects.saturation, { vm.setEffects(saturation=it) }, valueRange=0f..2f, modifier=Modifier.padding(horizontal=16.dp))
     Text("Luminosité ${state.effects.brightness.roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(state.effects.brightness, { vm.setEffects(brightness=it) }, valueRange=-1f..1f, modifier=Modifier.padding(horizontal=16.dp))
     Text("Teinte ${state.effects.hue.roundToInt()}°", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(state.effects.hue, { vm.setEffects(hue=it) }, valueRange=-180f..180f, modifier=Modifier.padding(horizontal=16.dp))
