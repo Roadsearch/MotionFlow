@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.LastPage
 import androidx.compose.material.icons.automirrored.rounded.Redo
+import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -279,7 +280,7 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 ActionChip("Flou", Icons.Rounded.BlurOn, hasClip, state.effects.blur > 0f) {
                     vm.setEffects(blur = if (state.effects.blur > 0f) 0f else 8f)
                 }
-                ActionChip("Rotation", Icons.Rounded.RotateRight, hasClip) {
+                ActionChip("Rotation", Icons.AutoMirrored.Rounded.RotateRight, hasClip) {
                     vm.setEffects(rotation = (state.effects.rotation + 90f) % 360f)
                 }
                 ActionChip("Animer", Icons.Rounded.Animation, hasClip) { actions.openSheet(Tool.MORE) }
