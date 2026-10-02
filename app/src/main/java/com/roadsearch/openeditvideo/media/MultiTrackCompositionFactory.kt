@@ -20,6 +20,7 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextOverlay as TextOverlayModel
 import com.roadsearch.openeditvideo.model.VideoClip
+import com.roadsearch.openeditvideo.model.keyframesAt
 
 /** Builds an absolute-time Media3 composition from the editable NLE timeline. */
 @UnstableApi
@@ -83,7 +84,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .setUri(placeholderImage("openedit_black", 0xFF000000.toInt()))
             .setImageDurationMs(durationMs)
             .build()
-        return EditedMediaItemSequence.withVideoFrom(EditedMediaItem.Builder(item).build())
+        return EditedMediaItemSequence.withVideoFrom(listOf(EditedMediaItem.Builder(item).build()))
     }
 
     private fun buildVideoSequence(state: EditorUiState, clip: VideoClip, clipDurationMs: Long, timelineDurationMs: Long): EditedMediaItemSequence {
@@ -124,7 +125,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .build()
         val text = TextOverlay.createStaticTextOverlay(SpannableString(overlay.text), settings)
         val item = EditedMediaItem.Builder(transparent)
-            .setEffects(Effects(emptyList(), ImmutableList.of(OverlayEffect(ImmutableList.of(text)))))
+            .setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(text)))))
             .build()
         val suffixUs = (timelineDurationMs - overlay.endMs).coerceAtLeast(0L) * 1000L
         return EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).apply {
@@ -145,7 +146,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
                         .setEndPositionMs(audio.startMs + durationMs)
                         .build()
                 ).build()
-        ).setEffects(Effects(listOf(MediaEngine.constantGainProcessor(audio.volume)))).build()
+        ).setEffects(Effects(listOf(MediaEngine.constantGainProcessor(audio.volume)), emptyList())).build()
         val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
         if (audio.timelineStartMs > 0L) builder.addGap(audio.timelineStartMs * 1000L)
         builder.addItem(item)
