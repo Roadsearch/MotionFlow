@@ -34,7 +34,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
     val scroll = rememberScrollState(); val contentWidth = (duration / 1000f * px + 240f).dp
     Column(Modifier.fillMaxWidth().background(TPanel)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Timeline", Color.White, Modifier.weight(1f))
+            Text("Timeline", color = Color.White, modifier = Modifier.weight(1f))
             Text(
                 text = if (state.snappingEnabled) "Aimant ✓" else "Aimant",
                 color = if (state.snappingEnabled) TAccent else TMuted,
@@ -52,7 +52,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Rounded.Flag, contentDescription = "Ajouter un marqueur", tint = TMarker, modifier = Modifier.size(17.dp)) }
             Spacer(Modifier.width(6.dp))
-            Text("${"%.1f".format(state.zoom)}×", TMuted)
+            Text("${"%.1f".format(state.zoom)}×", color = TMuted)
         }
         Box(Modifier.fillMaxWidth().height(28.dp).horizontalScroll(scroll)) { TimeRuler(duration, px, contentWidth) }
         if (state.markers.isNotEmpty()) {
@@ -71,7 +71,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
     }
 }
 
-@Composable private fun TimeRuler(duration: Long, px: Float, width: androidx.compose.ui.unit.Dp) { Row(Modifier.width(width).fillMaxHeight()) { repeat((duration / 1000 + 2).toInt()) { s -> Box(Modifier.width(px.dp).fillMaxHeight()) { Text(if (s % 5 == 0) "${s}s" else "·", TMuted) } } } }
+@Composable private fun TimeRuler(duration: Long, px: Float, width: androidx.compose.ui.unit.Dp) { Row(Modifier.width(width).fillMaxHeight()) { repeat((duration / 1000 + 2).toInt()) { s -> Box(Modifier.width(px.dp).fillMaxHeight()) { Text(if (s % 5 == 0) "${s}s" else "·", color = TMuted) } } } }
 
 @Composable private fun MarkerLane(state: EditorUiState, vm: EditorViewModel, px: Float, width: androidx.compose.ui.unit.Dp) {
     Box(Modifier.width(width).fillMaxHeight()) {
@@ -97,7 +97,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
 @Composable private fun TrackHeader(track: Int, label: String, state: EditorUiState, vm: EditorViewModel) {
     val ts = state.trackStates[track] ?: TrackState()
     Column(Modifier.width(38.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, TMuted)
+        Text(label, color = TMuted)
         Row {
             Box(Modifier.size(22.dp).clickable { vm.toggleTrackLock(track) }, contentAlignment = Alignment.Center) {
                 Icon(
@@ -153,7 +153,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
                     onDragCancel = { vm.cancelEditGesture() },
                 ) { _, drag -> vm.moveClip(clip.id, (drag.x / px * 1000f).toLong()) }
                 else detectTapGestures { vm.select(clip.id) }
-            }) { Column(Modifier.padding(horizontal = 7.dp)) { Text(clip.name, Color.White, maxLines = 1); Text("${d / 1000}s", TMuted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) } }
+            }) { Column(Modifier.padding(horizontal = 7.dp)) { Text(clip.name, color = Color.White, maxLines = 1); Text("${d / 1000}s", color = TMuted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) } }
             if (!ts.locked) Handle(onStart = { vm.select(clip.id); vm.beginEditGesture() }, onEnd = { vm.commitEditGesture() }, onCancel = { vm.cancelEditGesture() }) { delta -> vm.trimRight(clip.id, (delta / px * 1000f).toLong()) }
         }
         if (clip.keyframes.isNotEmpty()) {
@@ -166,7 +166,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
     }
 }
 
-@Composable private fun AudioTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(48.dp)) { Text("A1", TMuted, Modifier.width(38.dp).padding(start = 8.dp, top = 15.dp)); Box(Modifier.weight(1f).height(42.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(42.dp)) { state.audioClips.sortedBy { it.timelineStartMs }.forEach { a -> Box(Modifier.offset(x = (a.timelineStartMs / 1000f * px).dp).width(((((if (a.endMs > a.startMs) a.endMs - a.startMs else 3000L) / 1000f * px).coerceAtLeast(70f)).dp)).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF245B68))) { WaveformStrip(a.id) } } } } } }
+@Composable private fun AudioTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(48.dp)) { Text("A1", color = TMuted, modifier = Modifier.width(38.dp).padding(start = 8.dp, top = 15.dp)); Box(Modifier.weight(1f).height(42.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(42.dp)) { state.audioClips.sortedBy { it.timelineStartMs }.forEach { a -> Box(Modifier.offset(x = (a.timelineStartMs / 1000f * px).dp).width(((((if (a.endMs > a.startMs) a.endMs - a.startMs else 3000L) / 1000f * px).coerceAtLeast(70f)).dp)).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF245B68))) { WaveformStrip(a.id) } } } } } }
 
 /** Symmetric pseudo-waveform, deterministic per clip so it stays stable across recompositions. */
 @Composable private fun WaveformStrip(seed: Long = 0L) {
@@ -182,7 +182,7 @@ private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
     }
 }
 
-@Composable private fun TextTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(42.dp)) { Text("T1", TMuted, Modifier.width(38.dp).padding(start = 8.dp, top = 12.dp)); Box(Modifier.weight(1f).height(38.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(38.dp)) { state.textOverlays.sortedBy { it.startMs }.forEach { t -> Box(Modifier.offset(x = (t.startMs / 1000f * px).dp).width((((t.endMs - t.startMs) / 1000f * px).coerceAtLeast(60f)).dp).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF5A3D78)), contentAlignment = Alignment.Center) { Text(t.text, Color.White, maxLines = 1) } } } } } }
+@Composable private fun TextTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(42.dp)) { Text("T1", color = TMuted, modifier = Modifier.width(38.dp).padding(start = 8.dp, top = 12.dp)); Box(Modifier.weight(1f).height(38.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(38.dp)) { state.textOverlays.sortedBy { it.startMs }.forEach { t -> Box(Modifier.offset(x = (t.startMs / 1000f * px).dp).width((((t.endMs - t.startMs) / 1000f * px).coerceAtLeast(60f)).dp).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF5A3D78)), contentAlignment = Alignment.Center) { Text(t.text, color = Color.White, maxLines = 1) } } } } } }
 
 @Composable private fun Handle(
     onStart: () -> Unit,

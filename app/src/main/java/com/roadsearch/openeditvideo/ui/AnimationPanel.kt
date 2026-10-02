@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.roadsearch.openeditvideo.model.Easing
 import com.roadsearch.openeditvideo.model.TransformAnimation
 import com.roadsearch.openeditvideo.model.AnimatedKeyframe
+import com.roadsearch.openeditvideo.model.selectedClip
 
 @Composable
 fun AnimationPanel(vm: EditorViewModel) {

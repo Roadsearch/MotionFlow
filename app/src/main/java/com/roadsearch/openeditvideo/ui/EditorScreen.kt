@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -31,6 +32,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
 
 private val Bg = Color(0xFF08090D)
@@ -46,7 +48,8 @@ fun EditorScreen(vm: EditorViewModel) {
     var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var textDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Audio", true) } }
-    fun pickVideo() = videoPicker.launch(arrayOf("video/*", "image/*")); fun pickAudio() = audioPicker.launch(arrayOf("audio/*"))
+    fun pickVideo() { videoPicker.launch(arrayOf("video/*", "image/*")) }
+    fun pickAudio() { audioPicker.launch(arrayOf("audio/*")) }
 
     Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
         TopBar({ pickVideo() }, vm::exportSelected, more, { more = it }, state.selectedClipId != null, vm)
@@ -120,7 +123,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 }
 
 @OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable private fun Preview(context: Context, state: EditorUiState, vm: EditorViewModel) {
+@Composable private fun ColumnScope.Preview(context: Context, state: EditorUiState, vm: EditorViewModel) {
     val clip = state.selectedClip()
     Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
         if (clip == null) EmptyPreview() else {
@@ -205,5 +208,5 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 @Composable private fun SheetTitle(t:String){Text(t,color=Color.White,style=MaterialTheme.typography.titleLarge,modifier=Modifier.padding(horizontal=20.dp,vertical=8.dp))}
 @Composable private fun SheetAction(label:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit){ListItem({Text(label,color=Color.White)},leadingContent={Icon(icon,null,tint=Accent)},modifier=Modifier.clickable(onClick=onClick),colors=ListItemDefaults.colors(containerColor=Color.Transparent))}
 @Composable private fun TextDialog(close:()->Unit, add:(String)->Unit){var text by remember{mutableStateOf("")}; AlertDialog(onDismissRequest=close,title={Text("Ajouter un texte")},text={OutlinedTextField(text,{text=it},label={Text("Texte")},singleLine=true)},confirmButton={TextButton({add(text);close()}){Text("Ajouter")}},dismissButton={TextButton(close){Text("Annuler")}})}
-private fun formatTime(ms:Long):String{val t=ms.coerceAtLeast(0)/1000;return "%02d:%02d".format(t/60,t%60)}
+internal fun formatTime(ms:Long):String{val t=ms.coerceAtLeast(0)/1000;return "%02d:%02d".format(t/60,t%60)}
 private fun displayName(context:Context,uri:Uri):String?=context.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}
