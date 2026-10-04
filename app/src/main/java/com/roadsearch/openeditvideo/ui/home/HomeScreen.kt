@@ -87,7 +87,7 @@ fun HomeScreen(state: HomeUiState, actions: HomeActions, modifier: Modifier = Mo
                 item(key = "new") { Spacer(Modifier.height(18.dp.sc())); NewProjectButton(actions.onNewProject) }
                 item(key = "tools") {
                     Spacer(Modifier.height(14.dp.sc()))
-                    QuickToolsRow { tool ->
+                    QuickToolsRow(onTool = { tool ->
                         when (tool) {
                             QuickTool.CAMERA -> try {
                                 cameraLauncher.launch(Intent(MediaStore.ACTION_VIDEO_CAPTURE))
@@ -96,7 +96,7 @@ fun HomeScreen(state: HomeUiState, actions: HomeActions, modifier: Modifier = Mo
                             QuickTool.TEMPLATES -> actions.onTemplates()
                             QuickTool.IMPORT -> importPicker.launch(arrayOf("video/*", "image/*"))
                         }
-                    }
+                    })
                 }
                 item(key = "recent-header") {
                     Spacer(Modifier.height(24.dp.sc()))
