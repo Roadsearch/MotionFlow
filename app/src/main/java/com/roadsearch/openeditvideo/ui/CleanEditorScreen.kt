@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -56,6 +58,7 @@ fun CleanEditorScreen(vm: EditorViewModel) {
             Controls(state, ratio, { ratio = it }, { vm.seekTo((state.positionMs - 5000).coerceAtLeast(0)) },
                 { vm.setPlaying(!state.playing) },
                 { vm.seekTo((state.positionMs + 5000).coerceAtMost(state.durationMs)) })
+            TimelineToolbar(state, vm)
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 3.dp)) {
                 Text("Timeline", color = Color.White, style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
@@ -64,7 +67,7 @@ fun CleanEditorScreen(vm: EditorViewModel) {
             }
             Box(Modifier.height(150.dp)) { InteractiveTimeline(state, vm) }
             ToolDock(expanded, { expanded = !expanded }, open, vm::split, vm::deleteSelected,
-                { vm.addText("Nouveau texte") }, vm::toggleMute, { menu = true })
+                { vm.addText("Nouveau texte") }, vm::toggleMute, { vm.setKeyframeProperty() }, { menu = true })
         }
     }
 
@@ -167,15 +170,45 @@ private fun Controls(state: EditorUiState, ratio: PreviewRatio, setRatio: (Previ
 }
 
 @Composable
+private fun TimelineToolbar(state: EditorUiState, vm: EditorViewModel) {
+    var zoom by remember(state.zoom) { mutableFloatStateOf(state.zoom) }
+    Surface(color = CleanPanel, tonalElevation = 1.dp) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("Zoom", color = CleanMuted, style = MaterialTheme.typography.labelSmall)
+            Slider(value = zoom, onValueChange = { zoom = it; vm.setZoom(it) },
+                valueRange = .65f..4f, modifier = Modifier.weight(1f).padding(horizontal = 6.dp))
+            Text(String.format("%.1fx", zoom), color = Color.White,
+                style = MaterialTheme.typography.labelSmall)
+            IconButton({ vm.toggleSnapping() }) {
+                Icon(Icons.Rounded.GpsFixed, "Magnétisme",
+                    tint = if (state.snappingEnabled) CleanAccent else CleanMuted)
+            }
+            IconButton({ vm.addMarkerAtPlayhead("Marqueur") }) {
+                Icon(Icons.Rounded.BookmarkAdd, "Marqueur", tint = Color.White)
+            }
+            IconButton({ vm.undo() }, enabled = vm.canUndo()) {
+                Icon(Icons.Rounded.Undo, "Annuler", tint = Color.White)
+            }
+            IconButton({ vm.redo() }, enabled = vm.canRedo()) {
+                Icon(Icons.Rounded.Redo, "Rétablir", tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ToolDock(expanded: Boolean, toggle: () -> Unit, open: () -> Unit, cut: () -> Unit,
-    delete: () -> Unit, text: () -> Unit, mute: () -> Unit, more: () -> Unit) {
+    delete: () -> Unit, text: () -> Unit, mute: () -> Unit, keyframe: () -> Unit, more: () -> Unit) {
     Surface(color = CleanPanel, tonalElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
-            if (expanded) Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            if (expanded) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ToolButton("Média", Icons.Rounded.VideoLibrary, open)
                 ToolButton("Couper", Icons.Rounded.ContentCut, cut)
                 ToolButton("Texte", Icons.Rounded.TextFields, text)
                 ToolButton("Son", Icons.Rounded.VolumeUp, mute)
+                ToolButton("Keyframe", Icons.Rounded.Key, keyframe)
                 ToolButton("Supprimer", Icons.Rounded.DeleteOutline, delete)
                 ToolButton("Plus", Icons.Rounded.MoreHoriz, more)
             }
