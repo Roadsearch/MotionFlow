@@ -50,6 +50,8 @@ class EditorViewModel @Inject constructor(
     val state: StateFlow<EditorUiState> = _state
 
     private var hydrated = false
+    private var hydratedId: String? = null
+    private var pendingImport: Pair<Uri, String>? = null
 
     private data class Snapshot(
         val clips: List<VideoClip>,
@@ -75,24 +77,26 @@ class EditorViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             repository.observe().collectLatest { entity ->
-                if (entity == null) {
-                    if (!hydrated) repository.save(_state.value)
-                } else if (!hydrated) {
-                    hydrated = true
-                    val restored = runCatching { EditorStateCodec.decode(entity.documentJson) }.getOrNull()
-                    if (restored != null) _state.value = restored else repository.save(_state.value)
-                }
+                if (entity == null || hydratedId == entity.id) return@collectLatest
+                // New project: swap the whole editor state. No suspension point below, so the save pipeline
+                // always tags the restored state with the new id.
+                hydrated = false
+                undoStack.clear(); redoStack.clear()
+                _state.value = runCatching { EditorStateCodec.decode(entity.documentJson) }.getOrNull() ?: EditorUiState()
+                hydratedId = entity.id
+                hydrated = true
+                pendingImport?.let { (uri, name) -> pendingImport = null; import(uri, name) }
             }
         }
 
         viewModelScope.launch {
             state
                 .drop(1)
-                .map { EditorStateCodec.encode(it) }
+                .map { EditorStateCodec.encode(it) to hydratedId }
                 .distinctUntilChanged()
                 .debounce(650L)
-                .collectLatest { json ->
-                    if (hydrated) repository.saveJson(json)
+                .collectLatest { (json, id) ->
+                    if (hydrated && id != null) repository.saveJson(json, id)
                 }
         }
 
@@ -168,6 +172,16 @@ class EditorViewModel @Inject constructor(
                 snappingEnabled = s.snappingEnabled,
             )
         }
+    }
+
+    /** Imports [uri] as soon as the project being opened has been loaded (avoids racing the hydration). */
+    fun queueImport(uri: Uri, name: String) { pendingImport = uri to name }
+
+    /** Writes the current state immediately (call before leaving the editor; the debounced save may still be pending). */
+    fun flushSave() {
+        val id = hydratedId ?: return
+        val json = EditorStateCodec.encode(_state.value)
+        viewModelScope.launch { repository.saveJson(json, id) }
     }
 
     fun undo() {
@@ -684,7 +698,7 @@ class EditorViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                repository.save(snapshot)
+                repository.save(snapshot, hydratedId ?: repository.currentId.value)
             } catch (error: Throwable) {
                 _state.update { it.copy(exportProgress = null, exportMessage = "Impossible d'enregistrer le projet : ${error.message ?: "erreur inconnue"}") }
                 return@launch
@@ -692,7 +706,7 @@ class EditorViewModel @Inject constructor(
             val request = OneTimeWorkRequestBuilder<VideoExportWorker>()
                 .setInputData(
                     workDataOf(
-                        ExportKeys.PROJECT_ID to ProjectRepository.DEFAULT_PROJECT_ID,
+                        ExportKeys.PROJECT_ID to (hydratedId ?: repository.currentId.value),
                         ExportKeys.OUTPUT_NAME to "OpenEditVideo_${System.currentTimeMillis()}.mp4",
                     )
                 )

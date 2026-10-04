@@ -32,7 +32,7 @@ class VideoExportWorker @AssistedInject constructor(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         setForeground(createForegroundInfo(0))
 
-        val project = repository.get()
+        val project = repository.get(inputData.getString(ExportKeys.PROJECT_ID) ?: ProjectRepository.DEFAULT_PROJECT_ID)
             ?: return@withContext Result.failure(workDataOf(ExportKeys.ERROR to "Projet introuvable"))
         val state = runCatching { EditorStateCodec.decode(project.documentJson) }
             .getOrElse { error ->

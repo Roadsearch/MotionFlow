@@ -37,19 +37,21 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
+import com.roadsearch.openeditvideo.ui.theme.MfColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
 
-internal val Bg = Color(0xFF0A101A)
-internal val Panel = Color(0xFF0F1724)
-internal val Card = Color(0xFF182233)
-internal val Muted = Color(0xFF8A94A6)
-internal val Accent = Color(0xFF19D3C5)
+// Aligned on the MotionFlow design tokens (ui/theme/Color.kt).
+internal val Bg = MfColors.Background
+internal val Panel = MfColors.Surface
+internal val Card = MfColors.Card
+internal val Muted = MfColors.TextSecondary
+internal val Accent = MfColors.Cyan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditorScreen(vm: EditorViewModel) {
+fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     val state by vm.state.collectAsState(); val context = LocalContext.current
     var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
@@ -60,7 +62,7 @@ fun EditorScreen(vm: EditorViewModel) {
     fun pickAudio() { audioPicker.launch(arrayOf("audio/*")) }
 
     Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
-        TopBar({ pickVideo() }, vm::exportSelected, more, { more = it }, state.selectedClipId != null)
+        TopBar(onBack, { pickVideo() }, vm::exportSelected, more, { more = it }, state.selectedClipId != null)
         Preview(context, state, vm) { pickVideo() }
         TransportBar(state, vm)
         Timeline(state, vm)
@@ -127,9 +129,9 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     }
 }
 
-@Composable private fun TopBar(onImport: () -> Unit, onExport: () -> Unit, more: Boolean, setMore: (Boolean) -> Unit, canExport: Boolean) {
+@Composable private fun TopBar(onBack: () -> Unit, onImport: () -> Unit, onExport: () -> Unit, more: Boolean, setMore: (Boolean) -> Unit, canExport: Boolean) {
     Row(Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton({}) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color.White) }
+        IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Retour", tint = Color.White) }
         Column(Modifier.weight(1f)) { Text("Projet sans titre", color = Color.White, style = MaterialTheme.typography.titleMedium); Text("1080p · 30", color = Muted, style = MaterialTheme.typography.labelSmall) }
         IconButton(onImport) { Icon(Icons.Rounded.Add, "Importer", tint = Color.White) }
         Box { IconButton({ setMore(true) }) { Icon(Icons.Rounded.MoreVert, "Plus", tint = Color.White) }; DropdownMenu(more, { setMore(false) }) { DropdownMenuItem({ Text("Importer un média") }, leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) }, onClick = { setMore(false); onImport() }); DropdownMenuItem({ Text("Exporter") }, leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }, enabled = canExport, onClick = { setMore(false); onExport() }) } }
