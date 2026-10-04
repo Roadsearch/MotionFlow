@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import com.roadsearch.openeditvideo.ui.EditorScreen
+import com.roadsearch.openeditvideo.ui.CleanEditorScreen
 import com.roadsearch.openeditvideo.ui.EditorViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -16,6 +16,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { EditorScreen(viewModel) }
+        setContent { CleanEditorScreen(viewModel) }
     }
 }
