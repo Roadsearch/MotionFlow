@@ -59,6 +59,7 @@ fun CleanEditorScreen(vm: EditorViewModel) {
                 { vm.setPlaying(!state.playing) },
                 { vm.seekTo((state.positionMs + 5000).coerceAtMost(state.durationMs)) })
             TimelineToolbar(state, vm)
+            LayerSummary(state)
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 3.dp)) {
                 Text("Timeline", color = Color.White, style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.weight(1f))
@@ -172,6 +173,23 @@ private fun Controls(state: EditorUiState, ratio: PreviewRatio, setRatio: (Previ
             Spacer(Modifier.width(10.dp))
             Text(formatTime(state.durationMs), color = CleanMuted, style = MaterialTheme.typography.labelMedium)
         }
+    }
+}
+
+@Composable
+private fun LayerSummary(state: EditorUiState) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        AssistChip(onClick = {}, label = { Text("Vidéo " + state.clips.size) },
+            leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) })
+        AssistChip(onClick = {}, label = { Text("Audio " + state.audioClips.size) },
+            leadingIcon = { Icon(Icons.Rounded.Audiotrack, null) })
+        AssistChip(onClick = {}, label = { Text("Texte " + state.textOverlays.size) },
+            leadingIcon = { Icon(Icons.Rounded.TextFields, null) })
+        AssistChip(onClick = {}, label = { Text("Transitions " + state.transitions.size) },
+            leadingIcon = { Icon(Icons.Rounded.AutoAwesomeMotion, null) })
     }
 }
 
