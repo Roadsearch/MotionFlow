@@ -24,6 +24,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.EditorUiState
+import com.roadsearch.openeditvideo.model.selectedClip
 
 private val CleanBg = Color(0xFF080B10)
 private val CleanPanel = Color(0xFF11161E)
