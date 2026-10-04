@@ -38,6 +38,20 @@ data class TextOverlay(
     val text: String,
     val startMs: Long,
     val endMs: Long,
+    val style: TextStyleSpec = TextStyleSpec(),
+)
+
+@Serializable
+enum class TextPreset { CLASSIC, NEON, SCRIPT, BOLD3D }
+
+/** Visual style of a text overlay. [font]: bebas | inter | sans | serif | cursive. [size] in px of the rendered overlay; [posY] -1 (bottom) .. 1 (top). */
+@Serializable
+data class TextStyleSpec(
+    val preset: TextPreset = TextPreset.CLASSIC,
+    val font: String = "sans",
+    val colorArgb: Int = 0xFFFFFFFF.toInt(),
+    val size: Float = 64f,
+    val posY: Float = 0f,
 )
 
 @Serializable
@@ -66,10 +80,11 @@ data class MaskSettings(
     val y: Float = 0f,
     val width: Float = 1f,
     val height: Float = 1f,
+    val invert: Boolean = false,
 )
 
 @Serializable
-enum class MaskType { RECTANGLE, CIRCLE, LINEAR_GRADIENT, RADIAL_GRADIENT }
+enum class MaskType { RECTANGLE, CIRCLE, LINEAR_GRADIENT, RADIAL_GRADIENT, ELLIPSE }
 
 @Serializable
 data class ChromaKeySettings(

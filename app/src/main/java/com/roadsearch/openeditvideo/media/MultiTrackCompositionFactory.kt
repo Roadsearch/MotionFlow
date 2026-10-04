@@ -3,7 +3,13 @@ package com.roadsearch.openeditvideo.media
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.graphics.Typeface
 import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.TypefaceSpan
+import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.Size
@@ -112,6 +118,29 @@ class MultiTrackCompositionFactory(private val context: Context) {
         }.build()
     }
 
+    /** Applies the drawer-selected style (font, colour, size, preset) to the exported text. */
+    private fun styledText(overlay: TextOverlayModel): SpannableString {
+        val st = overlay.style
+        val base = when (st.font) {
+            "bebas" -> ResourcesCompat.getFont(context, com.roadsearch.openeditvideo.R.font.bebas_neue_regular)
+            "inter" -> ResourcesCompat.getFont(context, com.roadsearch.openeditvideo.R.font.inter_variable)
+            "serif" -> Typeface.SERIF
+            "cursive" -> Typeface.create("cursive", Typeface.NORMAL)
+            else -> Typeface.SANS_SERIF
+        } ?: Typeface.SANS_SERIF
+        val face = when (st.preset) {
+            com.roadsearch.openeditvideo.model.TextPreset.CLASSIC, com.roadsearch.openeditvideo.model.TextPreset.BOLD3D -> Typeface.create(base, Typeface.BOLD)
+            com.roadsearch.openeditvideo.model.TextPreset.SCRIPT -> Typeface.create(base, Typeface.ITALIC)
+            com.roadsearch.openeditvideo.model.TextPreset.NEON -> base
+        }
+        return SpannableString(overlay.text).apply {
+            val flag = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            setSpan(ForegroundColorSpan(st.colorArgb), 0, length, flag)
+            setSpan(AbsoluteSizeSpan(st.size.toInt().coerceIn(12, 220)), 0, length, flag)
+            setSpan(TypefaceSpan(face), 0, length, flag)
+        }
+    }
+
     private fun buildTextSequence(overlay: TextOverlayModel, timelineDurationMs: Long): EditedMediaItemSequence {
         val duration = (overlay.endMs - overlay.startMs).coerceAtLeast(1L)
         val transparent = MediaItem.Builder()
@@ -119,11 +148,11 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .setImageDurationMs(duration)
             .build()
         val settings = StaticOverlaySettings.Builder()
-            .setBackgroundFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(0f, overlay.style.posY.coerceIn(-1f, 1f))
             .setOverlayFrameAnchor(0f, 0f)
             .setScale(1f, 1f)
             .build()
-        val text = TextOverlay.createStaticTextOverlay(SpannableString(overlay.text), settings)
+        val text = TextOverlay.createStaticTextOverlay(styledText(overlay), settings)
         val item = EditedMediaItem.Builder(transparent)
             .setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(text)))))
             .build()

@@ -147,8 +147,25 @@ object EditorStateCodec {
         timelineStartMs = o.optLong("timelineStart", 0L)
     )
 
-    private fun text(t: TextOverlay) = JSONObject().apply { put("id", t.id); put("text", t.text); put("start", t.startMs); put("end", t.endMs) }
-    private fun readText(o: JSONObject) = TextOverlay(o.getLong("id"), o.optString("text"), o.optLong("start"), o.optLong("end"))
+    private fun text(t: TextOverlay) = JSONObject().apply {
+        put("id", t.id); put("text", t.text); put("start", t.startMs); put("end", t.endMs)
+        put("style", JSONObject().apply {
+            put("preset", t.style.preset.name); put("font", t.style.font); put("color", t.style.colorArgb)
+            put("size", t.style.size.toDouble()); put("posY", t.style.posY.toDouble())
+        })
+    }
+    private fun readText(o: JSONObject) = TextOverlay(
+        o.getLong("id"), o.optString("text"), o.optLong("start"), o.optLong("end"),
+        o.optJSONObject("style")?.let { s ->
+            TextStyleSpec(
+                preset = runCatching { TextPreset.valueOf(s.optString("preset")) }.getOrDefault(TextPreset.CLASSIC),
+                font = s.optString("font", "sans"),
+                colorArgb = s.optInt("color", 0xFFFFFFFF.toInt()),
+                size = s.optDouble("size", 64.0).toFloat(),
+                posY = s.optDouble("posY", 0.0).toFloat(),
+            )
+        } ?: TextStyleSpec(),
+    )
 
     private fun effects(e: EffectSettings) = JSONObject().apply {
         put("rotation", e.rotation.toDouble()); put("contrast", e.contrast.toDouble()); put("saturation", e.saturation.toDouble())
@@ -187,8 +204,9 @@ object EditorStateCodec {
     private fun readAnimation(o: JSONObject?): TransformAnimation = TransformAnimation(readAnimated(o?.optJSONArray("x")),readAnimated(o?.optJSONArray("y")),readAnimated(o?.optJSONArray("scale")),readAnimated(o?.optJSONArray("rotation")),readAnimated(o?.optJSONArray("opacity")))
     private fun readAnimated(a: JSONArray?): List<AnimatedKeyframe> = buildList { if (a != null) for (i in 0 until a.length()) { val o=a.getJSONObject(i); add(AnimatedKeyframe(o.getLong("time"),o.optDouble("value", 0.0).toFloat(),runCatching { Easing.valueOf(o.optString("easing", Easing.LINEAR.name)) }.getOrDefault(Easing.LINEAR))) } }
 
-    private fun mask(m: MaskSettings) = JSONObject().apply { put("enabled",m.enabled); put("type",m.type.name); put("feather",m.feather.toDouble()); put("x",m.x.toDouble()); put("y",m.y.toDouble()); put("width",m.width.toDouble()); put("height",m.height.toDouble()) }
+    private fun mask(m: MaskSettings) = JSONObject().apply { put("enabled",m.enabled); put("type",m.type.name); put("feather",m.feather.toDouble()); put("x",m.x.toDouble()); put("y",m.y.toDouble()); put("width",m.width.toDouble()); put("height",m.height.toDouble()); put("invert",m.invert) }
     private fun readMask(o: JSONObject) = MaskSettings(
+        invert = o.optBoolean("invert"),
         enabled = o.optBoolean("enabled"),
         type = runCatching { MaskType.valueOf(o.optString("type", MaskType.RECTANGLE.name)) }.getOrDefault(MaskType.RECTANGLE),
         feather = o.optDouble("feather", 0.0).toFloat(),

@@ -170,6 +170,7 @@ private fun maskLabel(mask: MaskSettings): String = if (!mask.enabled) "Masque" 
     MaskType.CIRCLE -> "Cercle"
     MaskType.LINEAR_GRADIENT -> "Dégradé"
     MaskType.RADIAL_GRADIENT -> "Radial"
+    MaskType.ELLIPSE -> "Ellipse"
 }
 
 private fun nextMask(mask: MaskSettings): MaskSettings {

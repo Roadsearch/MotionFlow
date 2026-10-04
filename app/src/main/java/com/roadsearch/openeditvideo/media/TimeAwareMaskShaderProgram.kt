@@ -37,7 +37,7 @@ class TimeAwareMaskShaderProgram(
             program.setFloatsUniform("uMaskRect", floatArrayOf(s.x.coerceIn(0f, 1f), s.y.coerceIn(0f, 1f), s.width.coerceIn(0.001f, 1f), s.height.coerceIn(0.001f, 1f)))
             program.setFloatUniform("uFeather", s.feather.coerceIn(0f, 0.5f))
             program.setFloatUniform("uMaskType", s.type.ordinal.toFloat())
-            program.setFloatUniform("uInvert", 0f)
+            program.setFloatUniform("uInvert", if (s.invert) 1f else 0f)
             program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
             program.bindAttributesAndUniforms()
             android.opengl.GLES20.glDrawArrays(android.opengl.GLES20.GL_TRIANGLE_STRIP, 0, 4)
