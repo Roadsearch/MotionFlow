@@ -41,6 +41,18 @@ data class TextOverlay(
 )
 
 @Serializable
+data class Transition(
+    val id: Long,
+    val fromClipId: Long,
+    val toClipId: Long,
+    val type: TransitionType = TransitionType.CROSSFADE,
+    val durationMs: Long = 400L,
+)
+
+@Serializable
+enum class TransitionType { CROSSFADE, DIP_BLACK, WIPE, SLIDE, ZOOM }
+
+@Serializable
 data class EffectSettings(
     val rotation: Float = 0f,
     val contrast: Float = 0f,
