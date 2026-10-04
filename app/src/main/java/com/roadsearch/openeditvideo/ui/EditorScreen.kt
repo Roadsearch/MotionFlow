@@ -38,6 +38,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
 import com.roadsearch.openeditvideo.ui.theme.MfColors
+import com.roadsearch.openeditvideo.core.TimelineMath
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.roundToInt
@@ -47,7 +52,7 @@ internal val Bg = MfColors.Background
 internal val Panel = MfColors.Surface
 internal val Card = MfColors.Card
 internal val Muted = MfColors.TextSecondary
-internal val Accent = MfColors.Cyan
+internal val Accent = MfColors.Active
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,52 +135,113 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 }
 
 @Composable private fun TopBar(onBack: () -> Unit, onImport: () -> Unit, onExport: () -> Unit, more: Boolean, setMore: (Boolean) -> Unit, canExport: Boolean) {
-    Row(Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Retour", tint = Color.White) }
-        Column(Modifier.weight(1f)) { Text("Projet sans titre", color = Color.White, style = MaterialTheme.typography.titleMedium); Text("1080p · 30", color = Muted, style = MaterialTheme.typography.labelSmall) }
-        IconButton(onImport) { Icon(Icons.Rounded.Add, "Importer", tint = Color.White) }
-        Box { IconButton({ setMore(true) }) { Icon(Icons.Rounded.MoreVert, "Plus", tint = Color.White) }; DropdownMenu(more, { setMore(false) }) { DropdownMenuItem({ Text("Importer un média") }, leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) }, onClick = { setMore(false); onImport() }); DropdownMenuItem({ Text("Exporter") }, leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }, enabled = canExport, onClick = { setMore(false); onExport() }) } }
-        FilledTonalButton(onExport, enabled = canExport, colors = ButtonDefaults.filledTonalButtonColors(containerColor = Accent, contentColor = Color.White), shape = RoundedCornerShape(12.dp)) { Icon(Icons.Rounded.FileUpload, null, Modifier.size(17.dp)); Spacer(Modifier.width(5.dp)); Text("Exporter") }
+    Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onBack) { Icon(Icons.Rounded.Close, "Fermer", tint = Color.White) }
+        Spacer(Modifier.weight(1f))
+        Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Card).padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Text("1080p · 30", color = Muted, style = MaterialTheme.typography.labelMedium)
+        }
+        Box {
+            IconButton({ setMore(true) }) { Icon(Icons.Rounded.MoreVert, "Plus", tint = Color.White) }
+            DropdownMenu(more, { setMore(false) }) {
+                DropdownMenuItem({ Text("Importer un média") }, leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) }, onClick = { setMore(false); onImport() })
+                DropdownMenuItem({ Text("Exporter") }, leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }, enabled = canExport, onClick = { setMore(false); onExport() })
+            }
+        }
+        Box(
+            Modifier.height(34.dp).clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (canExport) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF6A4DEB), Color(0xFF8B5CF6)))
+                    else androidx.compose.ui.graphics.SolidColor(Card),
+                )
+                .clickable(enabled = canExport, onClick = onExport)
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("Exporter", color = if (canExport) Color.White else Muted, style = MaterialTheme.typography.labelLarge) }
+        Spacer(Modifier.width(8.dp))
     }
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun ColumnScope.Preview(context: Context, state: EditorUiState, vm: EditorViewModel, onImport: () -> Unit) {
-    val clip = state.selectedClip()
-    Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-        if (clip == null) EmptyPreview(onImport) else {
-            val player = remember(clip.id) { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.Builder().setUri(clip.uri).setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionMs(clip.startMs).apply { if (clip.endMs > 0) setEndPositionMs(clip.endMs) }.build()).build()); prepare() } }
+    val latest by rememberUpdatedState(state)
+    val mainTrack = remember(state.clips) { state.clips.minOfOrNull { it.track } }
+    // The preview shows the clip under the playhead on the lowest video track (not just the selected one).
+    val clip = remember(state.clips, state.positionMs, state.durationMs, mainTrack) {
+        state.clips.filter { it.track == mainTrack }.firstOrNull { c ->
+            val length = TimelineMath.duration(c, c.sourceDurationMs.coerceAtLeast(state.durationMs))
+            state.positionMs >= c.timelineStartMs && state.positionMs < c.timelineStartMs + length
+        }
+    }
+
+    // Master clock: advances the playhead through clips, gaps, audio-only and text-only sections alike.
+    // Players follow the clock; they no longer overwrite the position (that made scrubbing impossible).
+    LaunchedEffect(state.playing) {
+        if (!state.playing) return@LaunchedEffect
+        var last = withFrameNanos { it }
+        var accNs = 0L
+        while (isActive) {
+            val now = withFrameNanos { it }
+            accNs += now - last
+            last = now
+            if (accNs < 33_000_000L) continue
+            val ms = accNs / 1_000_000L
+            accNs -= ms * 1_000_000L
+            val total = latest.timelineEndMs()
+            val next = latest.positionMs + ms
+            if (next >= total) { vm.setPosition(total); vm.setPlaying(false); break }
+            vm.setPosition(next)
+        }
+    }
+
+    Box(
+        Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp)).background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (state.clips.isEmpty()) {
+            EmptyPreview(onImport)
+        } else if (clip != null) key(clip.id) {
+            val player = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(clip.uri)); prepare() } }
             DisposableEffect(player) { onDispose { player.release() } }
-            LaunchedEffect(state.playing) { if (state.playing) player.play() else player.pause() }
-            LaunchedEffect(state.seekNonce, clip.id) {
-                val localPosition = (state.positionMs - clip.timelineStartMs + clip.startMs)
-                    .coerceIn(clip.startMs, clip.end(state.durationMs))
-                if (kotlin.math.abs(player.currentPosition - localPosition) > 80L) player.seekTo(localPosition)
+            fun localTarget(): Long {
+                val cur = latest.clips.firstOrNull { it.id == clip.id } ?: clip
+                return (cur.startMs + (latest.positionMs - cur.timelineStartMs)).coerceAtLeast(0L)
+            }
+            LaunchedEffect(player, state.seekNonce, state.playing) {
+                val target = localTarget()
+                if (kotlin.math.abs(player.currentPosition - target) > 120L) player.seekTo(target)
+                player.playWhenReady = latest.playing
+            }
+            LaunchedEffect(player, state.playing) {
+                if (state.playing) while (isActive) {
+                    delay(400)
+                    val target = localTarget()
+                    if (kotlin.math.abs(player.currentPosition - target) > 350L) player.seekTo(target)
+                }
             }
             LaunchedEffect(state.muted, clip.id, clip.effects, clip.animation, state.chromaKeys[clip.id]) {
                 player.volume = if (state.muted) 0f else clip.volume.coerceIn(0f, 2f)
                 player.setVideoEffects(vm.previewEffects(clip))
             }
-            LaunchedEffect(player, clip.id) {
-                while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-                    val local = player.currentPosition
-                    val timeline = (clip.timelineStartMs + (local - clip.startMs)).coerceAtLeast(0L)
-                    vm.setPosition(timeline)
-                    if (player.duration > 0) vm.setDuration(maxOf(state.durationMs, timeline + (player.duration - local).coerceAtLeast(0L)))
-                    delay(100)
-                }
-            }
-            DisposableEffect(player) { val l = object : Player.Listener { override fun onPlaybackStateChanged(s: Int) { if (s == Player.STATE_ENDED) vm.setPlaying(false); if (player.duration > 0) vm.setDuration(player.duration) } }; player.addListener(l); onDispose { player.removeListener(l) } }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val localTime = (state.positionMs - clip.timelineStartMs + clip.startMs).coerceAtLeast(clip.startMs)
-                val keyframe = clip.keyframesAt(state.positionMs)
-                AndroidView({ PlayerView(it).apply { this.player = player; useController = false } }, modifier = Modifier.aspectRatio(9f / 16f).fillMaxHeight().background(Color.Black, RoundedCornerShape(18.dp)))
-            }
+            AndroidView(
+                factory = { PlayerView(it).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
+                update = { it.player = player },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
 
-@Composable private fun EmptyPreview(onImport: () -> Unit) { Box(Modifier.aspectRatio(9f / 16f).fillMaxHeight().background(Card, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).clickable(onClick = onImport), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Rounded.AddPhotoAlternate, null, tint = Accent, modifier = Modifier.size(48.dp)); Spacer(Modifier.height(10.dp)); Text("Appuyer pour importer une vidéo", color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp)) } } }
+@Composable private fun EmptyPreview(onImport: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Card).clickable(onClick = onImport), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Rounded.AddPhotoAlternate, null, tint = Accent, modifier = Modifier.size(44.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("Appuyer pour importer une vidéo", color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
+        }
+    }
+}
 
 @Composable private fun Timeline(state: EditorUiState, vm: EditorViewModel) { InteractiveTimeline(state, vm) }
 

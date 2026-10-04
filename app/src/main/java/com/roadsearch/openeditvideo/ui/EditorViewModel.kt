@@ -245,13 +245,25 @@ class EditorViewModel @Inject constructor(
 
     fun select(id: Long) = _state.update { state ->
         val clip = state.clips.firstOrNull { it.id == id }
+        val clipEnd = clip?.let { it.timelineStartMs + TimelineMath.duration(it, it.sourceDurationMs.coerceAtLeast(state.durationMs)) }
+        val inside = clip != null && state.positionMs >= clip.timelineStartMs && state.positionMs < (clipEnd ?: 0L)
         state.copy(
             selectedClipId = id,
             selectedClipIds = setOf(id),
-            playing = false,
-            positionMs = clip?.timelineStartMs ?: state.positionMs,
+            selectedAudioId = null,
+            selectedTextId = null,
+            // Keep the playhead where it is when it already sits inside the clip.
+            positionMs = if (clip != null && !inside) clip.timelineStartMs else state.positionMs,
             effects = clip?.effects ?: state.effects,
         )
+    }
+
+    fun selectAudio(id: Long) = _state.update {
+        it.copy(selectedAudioId = id, selectedTextId = null, selectedClipId = null, selectedClipIds = emptySet())
+    }
+
+    fun selectText(id: Long) = _state.update {
+        it.copy(selectedTextId = id, selectedAudioId = null, selectedClipId = null, selectedClipIds = emptySet())
     }
 
     fun toggleSelect(id: Long) = _state.update { state ->
@@ -333,8 +345,57 @@ class EditorViewModel @Inject constructor(
         _state.update { it.copy(clips = it.clips.map { item -> if (item.id == id) trimmed else item }) }
     }
 
+    // ---- Audio & text lanes: move / trim ------------------------------------
+
+    fun moveAudio(id: Long, deltaMs: Long) {
+        if (_state.value.audioClips.none { it.id == id }) return
+        if (!gestureOpen) record()
+        _state.update { s -> s.copy(audioClips = s.audioClips.map { if (it.id == id) it.copy(timelineStartMs = (it.timelineStartMs + deltaMs).coerceAtLeast(0L)) else it }) }
+    }
+
+    fun trimAudioLeft(id: Long, deltaMs: Long) {
+        val a = _state.value.audioClips.firstOrNull { it.id == id } ?: return
+        if (!gestureOpen) record()
+        val end = if (a.endMs > a.startMs) a.endMs else a.sourceDurationMs
+        val newStart = (a.startMs + deltaMs).coerceIn(0L, (end - TimelineMath.MIN_CLIP_DURATION_MS).coerceAtLeast(a.startMs))
+        val shift = newStart - a.startMs
+        _state.update { s -> s.copy(audioClips = s.audioClips.map { if (it.id == id) it.copy(startMs = newStart, endMs = end, timelineStartMs = (it.timelineStartMs + shift).coerceAtLeast(0L)) else it }) }
+    }
+
+    fun trimAudioRight(id: Long, deltaMs: Long) {
+        val a = _state.value.audioClips.firstOrNull { it.id == id } ?: return
+        if (!gestureOpen) record()
+        val end = if (a.endMs > a.startMs) a.endMs else a.sourceDurationMs
+        val minEnd = a.startMs + TimelineMath.MIN_CLIP_DURATION_MS
+        val limit = if (a.sourceDurationMs > 0L) maxOf(a.sourceDurationMs, minEnd) else Long.MAX_VALUE
+        val newEnd = (end + deltaMs).coerceIn(minEnd, limit)
+        _state.update { s -> s.copy(audioClips = s.audioClips.map { if (it.id == id) it.copy(endMs = newEnd) else it }) }
+    }
+
+    fun moveText(id: Long, deltaMs: Long) {
+        val t = _state.value.textOverlays.firstOrNull { it.id == id } ?: return
+        if (!gestureOpen) record()
+        val start = (t.startMs + deltaMs).coerceAtLeast(0L)
+        val length = t.endMs - t.startMs
+        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(startMs = start, endMs = start + length) else it }) }
+    }
+
+    fun trimTextLeft(id: Long, deltaMs: Long) {
+        val t = _state.value.textOverlays.firstOrNull { it.id == id } ?: return
+        if (!gestureOpen) record()
+        val start = (t.startMs + deltaMs).coerceIn(0L, (t.endMs - TimelineMath.MIN_CLIP_DURATION_MS).coerceAtLeast(0L))
+        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(startMs = start) else it }) }
+    }
+
+    fun trimTextRight(id: Long, deltaMs: Long) {
+        val t = _state.value.textOverlays.firstOrNull { it.id == id } ?: return
+        if (!gestureOpen) record()
+        val end = (t.endMs + deltaMs).coerceAtLeast(t.startMs + TimelineMath.MIN_CLIP_DURATION_MS)
+        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(endMs = end) else it }) }
+    }
+
     fun toggleMute() = _state.update { it.copy(muted = !it.muted) }
-    fun setPlaying(value: Boolean) = _state.update { it.copy(playing = value) }
+    fun setPlaying(value: Boolean) = _state.update { it.copy(playing = value && it.timelineEndMs() > 0L) }
     fun setPosition(position: Long) = _state.update { it.copy(positionMs = position.coerceAtLeast(0L)) }
     fun setDuration(duration: Long) = _state.update { it.copy(durationMs = duration.coerceAtLeast(0L)) }
     fun seekTo(position: Long) = _state.update {
@@ -489,13 +550,19 @@ class EditorViewModel @Inject constructor(
     fun removeLastAudio() {
         if (_state.value.audioClips.isEmpty()) return
         record()
-        _state.update { it.copy(audioClips = it.audioClips.dropLast(1)) }
+        _state.update { s ->
+            val id = s.selectedAudioId
+            s.copy(audioClips = if (id != null) s.audioClips.filterNot { it.id == id } else s.audioClips.dropLast(1), selectedAudioId = null)
+        }
     }
 
     fun removeLastText() {
         if (_state.value.textOverlays.isEmpty()) return
         record()
-        _state.update { it.copy(textOverlays = it.textOverlays.dropLast(1)) }
+        _state.update { s ->
+            val id = s.selectedTextId
+            s.copy(textOverlays = if (id != null) s.textOverlays.filterNot { it.id == id } else s.textOverlays.dropLast(1), selectedTextId = null)
+        }
     }
 
     fun importOverlay(uri: Uri, name: String) {
@@ -568,6 +635,16 @@ class EditorViewModel @Inject constructor(
 
     fun deleteSelected() {
         val state = _state.value
+        state.selectedAudioId?.let { id ->
+            record()
+            _state.update { it.copy(audioClips = it.audioClips.filterNot { a -> a.id == id }, selectedAudioId = null) }
+            return
+        }
+        state.selectedTextId?.let { id ->
+            record()
+            _state.update { it.copy(textOverlays = it.textOverlays.filterNot { t -> t.id == id }, selectedTextId = null) }
+            return
+        }
         val ids = if (state.selectedClipIds.isNotEmpty()) state.selectedClipIds else setOfNotNull(state.selectedClipId)
         if (ids.isEmpty()) return
         record()

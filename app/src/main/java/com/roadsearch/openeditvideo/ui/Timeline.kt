@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TrackState
-import com.roadsearch.openeditvideo.model.end
+import com.roadsearch.openeditvideo.model.timelineEndMs
 import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 import com.roadsearch.openeditvideo.ui.timeline.AudioLane
@@ -79,12 +79,7 @@ private val MarkerTint = Color(0xFFFFB74D)
 @Composable
 fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
     val scale = remember(state.zoom) { TimelineScale(42f * state.zoom) }
-    val duration = remember(state.durationMs, state.clips, state.audioClips, state.textOverlays) {
-        val video = state.clips.maxOfOrNull { it.timelineStartMs + (it.end(state.durationMs) - it.startMs).coerceAtLeast(250L) } ?: 0L
-        val audio = state.audioClips.maxOfOrNull { it.timelineStartMs + (if (it.endMs > it.startMs) it.endMs - it.startMs else 3000L) } ?: 0L
-        val text = state.textOverlays.maxOfOrNull { it.endMs } ?: 0L
-        maxOf(state.durationMs, video, audio, text).coerceAtLeast(5_000L)
-    }
+    val duration = remember(state.clips, state.audioClips, state.textOverlays) { maxOf(state.timelineEndMs(), 5_000L) }
     val width = scale.msToDp(duration) + 160.dp
     val dens = LocalDensity.current.density
     val scroll = rememberScrollState()
@@ -102,9 +97,9 @@ fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
     fun snapped(ms: Long): Long =
         if (latest.snappingEnabled) TimelineMath.snapToMarkers(ms, latest.markers.map { it.positionMs }) else ms
 
-    // Keep the playhead visible while playing or scrubbing.
-    LaunchedEffect(shownMs, state.playing, scrubMs != null) {
-        if (viewportPx > 0 && (state.playing || scrubMs != null)) {
+    // Keep the playhead in view whenever it moves (play, scrub, seek, selection) and once the viewport is measured.
+    LaunchedEffect(shownMs, viewportPx, scale) {
+        if (viewportPx > 0) {
             val x = scale.msToDp(shownMs).value * dens
             val margin = viewportPx * 0.15f
             val left = scroll.value
@@ -172,8 +167,8 @@ fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
                             vm = vm, onSeek = { vm.seekTo(it) },
                         )
                     }
-                    TextLane(state.textOverlays, scale, width, LaneHeights.Text, onSeek = { vm.seekTo(it) })
-                    AudioLane(state.audioClips, scale, width, LaneHeights.Audio)
+                    TextLane(state.textOverlays, state.selectedTextId, scale, width, LaneHeights.Text, vm, onSeek = { vm.seekTo(it) })
+                    AudioLane(state.audioClips, state.selectedAudioId, scale, width, LaneHeights.Audio, vm, onSeek = { vm.seekTo(it) })
                 }
             }
         }
@@ -186,20 +181,20 @@ private fun TimelineToolbar(
     snapping: Boolean, zoom: Float,
     onSnap: () -> Unit, onMarker: () -> Unit, onZoomOut: () -> Unit, onZoomIn: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         val chip = RoundedCornerShape(50)
         Row(
             Modifier
                 .clip(chip)
-                .background(if (snapping) MfColors.Cyan.copy(alpha = .16f) else MfColors.Card)
-                .border(1.dp, if (snapping) MfColors.Cyan else MfColors.Outline, chip)
+                .background(if (snapping) MfColors.Active.copy(alpha = .16f) else MfColors.Card)
+                .border(1.dp, if (snapping) MfColors.Active else MfColors.Outline, chip)
                 .pressable(onClick = onSnap)
                 .padding(horizontal = 12.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(if (snapping) MfColors.Cyan else MfColors.TextMuted))
+            Box(Modifier.size(7.dp).clip(CircleShape).background(if (snapping) MfColors.Active else MfColors.TextMuted))
             Spacer(Modifier.width(7.dp))
-            Text("Aimant", color = if (snapping) MfColors.Cyan else MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium)
+            Text("Aimant", color = if (snapping) MfColors.Active else MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium)
         }
         Spacer(Modifier.weight(1f))
         ToolbarIcon(Icons.Rounded.Flag, "Ajouter un marqueur", MarkerTint, onMarker)

@@ -119,6 +119,8 @@ data class EditorUiState(
     val textOverlays: List<TextOverlay> = emptyList(),
     val selectedClipId: Long? = null,
     val selectedClipIds: Set<Long> = emptySet(),
+    val selectedAudioId: Long? = null,
+    val selectedTextId: Long? = null,
     val playing: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
@@ -146,6 +148,18 @@ enum class Tool(val label: String) {
 
 fun EditorUiState.selectedClip(): VideoClip? = clips.firstOrNull { it.id == selectedClipId }
 fun VideoClip.end(durationMs: Long): Long = if (endMs > startMs) endMs else sourceDurationMs.takeIf { it > startMs } ?: durationMs
+
+/** Playable length of an audio clip on the timeline. */
+fun AudioClip.lengthMs(): Long =
+    (if (endMs > startMs) endMs - startMs else sourceDurationMs - startMs).coerceAtLeast(250L)
+
+/** End of the last clip / audio / text on the timeline: the real project length. */
+fun EditorUiState.timelineEndMs(): Long {
+    val video = clips.maxOfOrNull { it.timelineStartMs + (it.end(durationMs) - it.startMs).coerceAtLeast(250L) } ?: 0L
+    val audio = audioClips.maxOfOrNull { it.timelineStartMs + it.lengthMs() } ?: 0L
+    val text = textOverlays.maxOfOrNull { it.endMs } ?: 0L
+    return maxOf(video, audio, text)
+}
 
 
 fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {

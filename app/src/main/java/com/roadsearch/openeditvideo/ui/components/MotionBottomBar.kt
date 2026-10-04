@@ -45,7 +45,7 @@ fun MotionBottomBar(selected: MainTab, onSelect: (MainTab) -> Unit, modifier: Mo
         Row(Modifier.fillMaxWidth().navigationBarsPadding().height(62.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             MainTab.entries.forEach { tab ->
                 val active = tab == selected
-                val tint = animateColorAsState(if (active) MfColors.Cyan else MfColors.TextMuted, label = "tabTint")
+                val tint = animateColorAsState(if (active) MfColors.Active else MfColors.TextMuted, label = "tabTint")
                 Column(
                     Modifier
                         .weight(1f)

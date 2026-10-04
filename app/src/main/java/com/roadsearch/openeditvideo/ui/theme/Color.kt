@@ -15,6 +15,7 @@ object MfColors {
     val Violet = Color(0xFFC546FF)
     val Indigo = Color(0xFF6C63FF)
     val Cyan = Color(0xFF00A3FF)
+    val Active = Color(0xFF6B7CFF)   // selected tab / toggle (periwinkle, sampled from the mockup)
     val Gold = Color(0xFFFFC857)
     val Danger = Color(0xFFFF5C7A)
 
@@ -22,7 +23,7 @@ object MfColors {
     val TextSecondary = Color(0xFFA2A2B8)
     val TextMuted = Color(0xFF6E6E85)
 
-    val BrandGradient: List<Color> = listOf(Violet, Indigo, Cyan)
+    val BrandGradient: List<Color> = listOf(Color(0xFF9F3CF9), Color(0xFF5B7CFF), Color(0xFF00CEFD))
     fun brandBrush(): Brush = Brush.linearGradient(BrandGradient)
 }
 
