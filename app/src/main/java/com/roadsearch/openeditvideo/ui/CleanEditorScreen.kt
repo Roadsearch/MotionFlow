@@ -81,6 +81,12 @@ fun CleanEditorScreen(vm: EditorViewModel) {
             ActionRow("Ajouter une transition", Icons.Rounded.AutoAwesomeMotion) {
                 vm.addTransition(); menu = false
             }
+            ActionRow("Audio", Icons.Rounded.Audiotrack) {
+                menu = false
+            }
+            ActionRow("Overlay texte", Icons.Rounded.TextFields) {
+                vm.addText("Nouveau texte"); menu = false
+            }
             ActionRow("Effets / keyframes", Icons.Rounded.AutoFixHigh) {
                 vm.setEffects(contrast = 0.05f); menu = false
             }
