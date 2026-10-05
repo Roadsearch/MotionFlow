@@ -69,7 +69,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     fun pickAudio() { audioPicker.launch(arrayOf("audio/*")) }
 
     Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
-        TopBar(onBack, { pickVideo() }, vm::exportSelected, more, { more = it }, state.selectedClipId != null)
+        TopBar(onBack, { pickVideo() }, { drawer = Drawer.EXPORT }, more, { more = it }, state.clips.any { it.track == 0 })
         Preview(context, state, vm) { pickVideo() }
         TransportBar(state, vm)
         Timeline(state, vm)

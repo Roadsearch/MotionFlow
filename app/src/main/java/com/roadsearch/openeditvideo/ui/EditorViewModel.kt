@@ -14,6 +14,8 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.data.ProjectRepository
 import com.roadsearch.openeditvideo.data.EditorStateCodec
 import com.roadsearch.openeditvideo.export.ExportKeys
+import com.roadsearch.openeditvideo.export.ExportSettings
+import kotlinx.coroutines.flow.asStateFlow
 import com.roadsearch.openeditvideo.export.MediaSourceValidator
 import com.roadsearch.openeditvideo.export.VideoExportWorker
 import com.roadsearch.openeditvideo.media.MediaProbe
@@ -786,7 +788,14 @@ class EditorViewModel @Inject constructor(
     fun previewEffects(clip: VideoClip): List<androidx.media3.common.Effect> =
         mediaEngine.previewEffects(_state.value, clip)
 
-    fun exportSelected() {
+    private val _exportSettings = MutableStateFlow(ExportSettings())
+    /** Last options chosen in the export drawer (kept while the editor lives). */
+    val exportSettings: StateFlow<ExportSettings> = _exportSettings.asStateFlow()
+    fun setExportSettings(settings: ExportSettings) { _exportSettings.value = settings }
+
+    fun exportSelected() = exportWith(_exportSettings.value)
+
+    fun exportWith(settings: ExportSettings) {
         val snapshot = _state.value
         if (snapshot.clips.none { it.track == 0 }) return
         val capabilityErrors = com.roadsearch.openeditvideo.export.ExportCapabilityAnalyzer.errors(snapshot)
@@ -807,6 +816,9 @@ class EditorViewModel @Inject constructor(
                     workDataOf(
                         ExportKeys.PROJECT_ID to (hydratedId ?: repository.currentId.value),
                         ExportKeys.OUTPUT_NAME to "OpenEditVideo_${System.currentTimeMillis()}.mp4",
+                        ExportKeys.RESOLUTION to settings.resolution.name,
+                        ExportKeys.FPS to settings.fps,
+                        ExportKeys.HIGH_QUALITY to settings.highQuality,
                     )
                 )
                 .build()

@@ -133,6 +133,7 @@ class MediaEngine(private val context: Context) {
     suspend fun exportCompositionSuspend(
         state: EditorUiState,
         output: java.io.File,
+        settings: com.roadsearch.openeditvideo.export.ExportSettings = com.roadsearch.openeditvideo.export.ExportSettings(),
         onProgress: (Float) -> Unit = {},
     ) = suspendCancellableCoroutine<Unit> { continuation ->
         val mainHandler = Handler(Looper.getMainLooper())
@@ -170,10 +171,17 @@ class MediaEngine(private val context: Context) {
 
         mainHandler.post {
             try {
-                val composition = MultiTrackCompositionFactory(context).build(state)
+                val composition = MultiTrackCompositionFactory(context).build(state, settings)
                 transformer = Transformer.Builder(context)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .setEncoderFactory(
+                        androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
+                            .setRequestedVideoEncoderSettings(
+                                androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(settings.videoBitrate).build(),
+                            )
+                            .build(),
+                    )
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, result: ExportResult) {
                             if (!continuation.isCompleted) {

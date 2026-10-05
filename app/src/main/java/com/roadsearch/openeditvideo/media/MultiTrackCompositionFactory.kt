@@ -48,7 +48,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
         return Uri.fromFile(file)
     }
 
-    fun build(state: EditorUiState): Composition {
+    fun build(state: EditorUiState, settings: com.roadsearch.openeditvideo.export.ExportSettings = com.roadsearch.openeditvideo.export.ExportSettings()): Composition {
         val clips = state.clips
             .filter { state.trackStates[it.track]?.hidden != true }
             .sortedWith(compareBy<VideoClip> { it.track }.thenBy { it.timelineStartMs }.thenBy { it.id })
@@ -80,9 +80,14 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .filter { it.endMs > it.startMs }
             .map { buildAudioSequence(it, durationMs) }
 
-        return Composition.Builder(videoSequences + audioSequences)
-            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans))
-            .build()
+        val outputSize = Size(settings.resolution.width, settings.resolution.height)
+        val builder = Composition.Builder(videoSequences + audioSequences)
+            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans, outputSize))
+        // Frame rate is a ceiling: frames are dropped to reach 24/30 fps; 60 keeps the source rate.
+        if (settings.fps < 60) {
+            builder.setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(androidx.media3.effect.FrameDropEffect.createDefaultFrameDropEffect(settings.fps.toFloat()))))
+        }
+        return builder.build()
     }
 
     private fun buildBlackBackgroundSequence(durationMs: Long): EditedMediaItemSequence {
@@ -202,9 +207,9 @@ private sealed interface VideoInputPlan {
 @UnstableApi
 private class TimelineVideoCompositorSettings(
     private val plans: List<VideoInputPlan>,
+    private val outputSize: Size,
 ) : androidx.media3.common.VideoCompositorSettings {
-    override fun getOutputSize(inputSizes: List<Size>): Size =
-        Size(MultiTrackCompositionFactory.DEFAULT_WIDTH, MultiTrackCompositionFactory.DEFAULT_HEIGHT)
+    override fun getOutputSize(inputSizes: List<Size>): Size = outputSize
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): StaticOverlaySettings {
         val plan = plans.getOrNull(inputId) ?: return StaticOverlaySettings.Builder().setAlphaScale(0f).build()

@@ -16,6 +16,7 @@ class Media3VideoExporter @Inject constructor(
     override suspend fun export(
         state: EditorUiState,
         output: File,
+        settings: ExportSettings,
         onProgress: (Float) -> Unit,
-    ) = engine.exportCompositionSuspend(state, output, onProgress)
+    ) = engine.exportCompositionSuspend(state, output, settings, onProgress)
 }
