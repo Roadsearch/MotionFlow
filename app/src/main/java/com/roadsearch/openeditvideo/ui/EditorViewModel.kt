@@ -512,6 +512,28 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun addText(text: String, style: TextStyleSpec) {
+        if (text.isBlank()) return
+        record()
+        val id = System.nanoTime()
+        _state.update { s ->
+            s.copy(
+                textOverlays = s.textOverlays + TextOverlay(id, text.trim(), s.positionMs, s.positionMs + 3_000L, style),
+                selectedTextId = id, selectedAudioId = null, selectedClipId = null, selectedClipIds = emptySet(),
+            )
+        }
+    }
+
+    fun updateText(id: Long, text: String, style: TextStyleSpec) {
+        if (text.isBlank() || _state.value.textOverlays.none { it.id == id }) return
+        record()
+        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(text = text.trim(), style = style) else it }) }
+    }
+
+    fun clearSelection() = _state.update {
+        it.copy(selectedClipId = null, selectedClipIds = emptySet(), selectedAudioId = null, selectedTextId = null)
+    }
+
     fun duplicateSelected() {
         val state = _state.value
         val clip = state.selectedClip() ?: return

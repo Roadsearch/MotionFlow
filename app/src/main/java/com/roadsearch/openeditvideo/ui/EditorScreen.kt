@@ -38,6 +38,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
 import com.roadsearch.openeditvideo.ui.theme.MfColors
+import com.roadsearch.openeditvideo.ui.drawers.Drawer
+import com.roadsearch.openeditvideo.ui.drawers.EditorDrawers
 import com.roadsearch.openeditvideo.core.TimelineMath
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.compose.runtime.key
@@ -58,7 +60,7 @@ internal val Accent = MfColors.Active
 @Composable
 fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     val state by vm.state.collectAsState(); val context = LocalContext.current
-    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Audio", true) } }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importOverlay(u, displayName(context, u) ?: "Overlay") } }
@@ -78,10 +80,13 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
             pickVideo = { pickVideo() }, pickAudio = { pickAudio() }, pickOverlay = { pickOverlay() },
             addText = { textDialog = true }, openSheet = { sheet = it },
             clipVolume = { clipVolumeDialog = true }, musicVolume = { musicVolumeDialog = true },
+            openDrawer = { drawer = it },
         ))
         TabBar(tab) { tab = it }
         AudioPreview(state)
     }}
+
+    EditorDrawers(drawer, { drawer = null }, state, vm, pickAudioFile = { pickAudio() })
 
     sheet?.let { tool ->
         ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Panel) {

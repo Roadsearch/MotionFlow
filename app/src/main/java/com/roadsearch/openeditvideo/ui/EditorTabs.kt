@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.roadsearch.openeditvideo.ui.drawers.Drawer
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -50,6 +51,7 @@ internal class TabActions(
     val openSheet: (Tool) -> Unit,
     val clipVolume: () -> Unit,
     val musicVolume: () -> Unit,
+    val openDrawer: (Drawer) -> Unit,
 )
 
 @Composable
@@ -245,9 +247,11 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 ActionChip("Volume", Icons.AutoMirrored.Rounded.VolumeUp, hasClip, onClick = actions.clipVolume)
                 ActionChip("Transition", Icons.Rounded.SwapHoriz, hasClip) { vm.addTransition() }
                 ActionChip("Marqueur", Icons.Rounded.Flag) { vm.addMarkerAtPlayhead() }
+                ActionChip("Outils IA", Icons.Rounded.AutoAwesome) { actions.openDrawer(Drawer.AI) }
             }
             EditTab.AUDIO -> ChipRow {
-                ActionChip("Ajouter", Icons.Rounded.MusicNote, onClick = actions.pickAudio)
+                ActionChip("Ajouter", Icons.Rounded.MusicNote) { actions.openDrawer(Drawer.AUDIO) }
+                ActionChip("Fichier", Icons.Rounded.FileUpload, onClick = actions.pickAudio)
                 ActionChip(
                     "Son vidéo",
                     if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -257,7 +261,8 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 ActionChip("Retirer", Icons.Rounded.DeleteOutline, state.audioClips.isNotEmpty(), tint = Color(0xFFFF8A8A)) { vm.removeLastAudio() }
             }
             EditTab.TEXT -> ChipRow {
-                ActionChip("Ajouter", Icons.Rounded.TextFields, onClick = actions.addText)
+                ActionChip("Ajouter", Icons.Rounded.TextFields) { vm.clearSelection(); actions.openDrawer(Drawer.TEXT_NEW) }
+                ActionChip("Style", Icons.Rounded.Palette, state.selectedTextId != null) { actions.openDrawer(Drawer.TEXT_EDIT) }
                 ActionChip("Retirer", Icons.Rounded.DeleteOutline, state.textOverlays.isNotEmpty(), tint = Color(0xFFFF8A8A)) { vm.removeLastText() }
             }
             EditTab.OVERLAY -> {
@@ -266,7 +271,7 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 val blend = clip?.let { state.blendModes[it.id] } ?: BlendMode.NORMAL
                 ChipRow {
                     ActionChip("Ajouter", Icons.Rounded.Layers, onClick = actions.pickOverlay)
-                    ActionChip(maskLabel(mask), Icons.Rounded.Crop, hasClip, mask.enabled) { vm.setMask(nextMask(mask)) }
+                    ActionChip("Masque", Icons.Rounded.Crop, hasClip, mask.enabled) { actions.openDrawer(Drawer.MASK) }
                     ActionChip("Chroma", Icons.Rounded.Palette, hasClip, key.enabled) { vm.setChromaKey(key.copy(enabled = !key.enabled)) }
                     ActionChip("Animer", Icons.Rounded.Animation, hasClip) { actions.openSheet(Tool.MORE) }
                 }
