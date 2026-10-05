@@ -1,16 +1,17 @@
 package com.roadsearch.openeditvideo.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,13 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Flag
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.LockOpen
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Remove
-import androidx.compose.material.icons.rounded.TextFields
-import androidx.compose.material.icons.rounded.Visibility
-import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,75 +33,93 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.roadsearch.openeditvideo.core.TimelineMath
+import androidx.compose.ui.unit.sp
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TrackState
 import com.roadsearch.openeditvideo.model.timelineEndMs
 import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 import com.roadsearch.openeditvideo.ui.timeline.AudioLane
-import com.roadsearch.openeditvideo.ui.timeline.LabelWidth
 import com.roadsearch.openeditvideo.ui.timeline.LaneHeights
 import com.roadsearch.openeditvideo.ui.timeline.MarkerLane
 import com.roadsearch.openeditvideo.ui.timeline.TextLane
 import com.roadsearch.openeditvideo.ui.timeline.TimelineRuler
 import com.roadsearch.openeditvideo.ui.timeline.TimelineScale
 import com.roadsearch.openeditvideo.ui.timeline.VideoLane
+import kotlinx.coroutines.flow.drop
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val MarkerTint = Color(0xFFFFB74D)
 
+/** Entry points shown inside the timeline itself (leading buttons, empty "ghost" tracks). */
+internal class TimelineActions(
+    val onImport: () -> Unit,
+    val onAddMusic: () -> Unit,
+    val onAddText: () -> Unit,
+)
+
 /**
- * Multi-track timeline: media (thumbnails), overlays, text and audio lanes under one shared horizontal scroll,
- * with a single playhead that can be scrubbed by dragging the ruler. Business logic stays in [EditorViewModel].
+ * Multi-track timeline with a FIXED playhead at the centre: the tracks scroll underneath it.
+ * Scroll offset <-> playhead time are kept in sync both ways, with half a viewport of margin on each side so time 0
+ * and the end can reach the centre. The leading margin hosts the "+" and mute buttons (they scroll with the content).
  */
 @Composable
-fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
+internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, actions: TimelineActions) {
     val scale = remember(state.zoom) { TimelineScale(42f * state.zoom) }
     val duration = remember(state.clips, state.audioClips, state.textOverlays) { maxOf(state.timelineEndMs(), 5_000L) }
-    val width = scale.msToDp(duration) + 160.dp
-    val dens = LocalDensity.current.density
+    val density = LocalDensity.current
+    val dens = density.density
     val scroll = rememberScrollState()
     var viewportPx by remember { mutableIntStateOf(0) }
-    var scrubMs by remember { mutableStateOf<Long?>(null) }
+    var expected by remember { mutableIntStateOf(-1) }
     val latest by rememberUpdatedState(state)
-    val shownMs = scrubMs ?: state.positionMs
-    val shown = rememberUpdatedState(shownMs)
-    val trackIds = remember(state.clips) { state.clips.map { it.track }.distinct().sorted().ifEmpty { listOf(0) } }
-    val selectedIds = remember(state.selectedClipId, state.selectedClipIds) {
-        state.selectedClipIds + listOfNotNull(state.selectedClipId)
-    }
 
-    fun msAt(xPx: Float): Long = scale.dpToMs(xPx / dens).coerceIn(0L, duration)
-    fun snapped(ms: Long): Long =
-        if (latest.snappingEnabled) TimelineMath.snapToMarkers(ms, latest.markers.map { it.positionMs }) else ms
+    val lead = with(density) { (viewportPx / 2).toDp() }
+    val trackWidth = scale.msToDp(duration)
+    val laneWidth = trackWidth + lead
+    val totalWidth = lead + laneWidth
 
-    // Keep the playhead in view whenever it moves (play, scrub, seek, selection) and once the viewport is measured.
-    LaunchedEffect(shownMs, viewportPx, scale) {
-        if (viewportPx > 0) {
-            val x = scale.msToDp(shownMs).value * dens
-            val margin = viewportPx * 0.15f
-            val left = scroll.value
-            if (x > left + viewportPx - margin) scroll.scrollTo((x - viewportPx + margin).toInt())
-            else if (x < left + margin) scroll.scrollTo((x - margin).toInt().coerceAtLeast(0))
+    fun msToPx(ms: Long): Int = (ms / 1000f * scale.dpPerSecond * dens).roundToInt()
+    fun pxToMs(px: Int): Long = (px / (scale.dpPerSecond * dens) * 1000f).toLong().coerceIn(0L, duration)
+
+    // Playhead time -> scroll offset (playback, taps, selection, zoom).
+    LaunchedEffect(state.positionMs, scale, viewportPx, scroll.maxValue) {
+        if (viewportPx > 0 && scroll.maxValue > 0 && !scroll.isScrollInProgress) {
+            val target = msToPx(state.positionMs).coerceIn(0, scroll.maxValue)
+            if (abs(scroll.value - target) > 1) {
+                expected = target
+                scroll.scrollTo(target)
+            }
         }
     }
+    // Scroll offset -> playhead time (finger drag and fling). Our own scrollTo calls are filtered by `expected`.
+    LaunchedEffect(scale, duration, viewportPx) {
+        snapshotFlow { scroll.value }.drop(1).collect { v ->
+            if (viewportPx == 0 || scroll.maxValue == 0 || abs(v - expected) <= 1) return@collect
+            if (latest.playing) vm.setPlaying(false)
+            val ms = pxToMs(v)
+            if (ms != latest.positionMs) vm.setPosition(ms)
+        }
+    }
+
+    val trackIds = remember(state.clips) { state.clips.map { it.track }.distinct().sorted().ifEmpty { listOf(0) } }
+    val selectedIds = remember(state.selectedClipId, state.selectedClipIds) { state.selectedClipIds + listOfNotNull(state.selectedClipId) }
 
     Column(Modifier.fillMaxWidth().background(MfColors.Surface)) {
         TimelineToolbar(
@@ -114,65 +127,82 @@ fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
             onSnap = vm::toggleSnapping, onMarker = { vm.addMarkerAtPlayhead() },
             onZoomOut = { vm.setZoom(state.zoom - .25f) }, onZoomIn = { vm.setZoom(state.zoom + .25f) },
         )
-        Row(Modifier.fillMaxWidth()) {
-            // Fixed label column: same lane heights as the scrolling content, so rows always line up.
-            Column(Modifier.width(LabelWidth)) {
-                Spacer(Modifier.height(LaneHeights.Ruler))
-                if (state.markers.isNotEmpty()) Spacer(Modifier.height(LaneHeights.Markers))
-                trackIds.forEachIndexed { i, track ->
-                    TrackLabel(track, i == 0, state.trackStates[track] ?: TrackState(), if (i == 0) LaneHeights.Main else LaneHeights.Overlay, vm)
-                }
-                StaticLabel(Icons.Rounded.TextFields, LaneHeights.Text)
-                StaticLabel(Icons.Rounded.MusicNote, LaneHeights.Audio)
-            }
-            Box(Modifier.weight(1f).onSizeChanged { viewportPx = it.width }.horizontalScroll(scroll)) {
-                Column(
-                    Modifier.width(width).drawWithContent {
-                        drawContent()
-                        val x = scale.dpPerSecond * shown.value / 1000f * density
-                        drawLine(Color.White, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
-                        drawCircle(Color.White, 6.dp.toPx(), Offset(x, 7.dp.toPx()))
-                        drawCircle(MfColors.Violet, 3.dp.toPx(), Offset(x, 7.dp.toPx()))
-                    },
-                ) {
-                    // Ruler = scrub zone: tap to seek, drag to scrub continuously (pauses playback).
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .pointerInput(scale, duration) { detectTapGestures { p -> vm.seekTo(msAt(p.x)) } }
-                            .pointerInput(scale, duration) {
-                                detectDragGestures(
-                                    onDragStart = { p ->
-                                        vm.setPlaying(false)
-                                        scrubMs = snapped(msAt(p.x)); vm.seekTo(msAt(p.x))
-                                    },
-                                    onDragEnd = { scrubMs = null },
-                                    onDragCancel = { scrubMs = null },
-                                ) { change, _ ->
-                                    val ms = msAt(change.position.x)
-                                    scrubMs = snapped(ms); vm.seekTo(ms)
-                                }
-                            },
-                    ) { TimelineRuler(duration, scale, width) }
+        Box(Modifier.fillMaxWidth().onSizeChanged { viewportPx = it.width }) {
+            Box(Modifier.fillMaxWidth().horizontalScroll(scroll)) {
+                Column(Modifier.width(totalWidth)) {
+                    LaneRow(lead, LaneHeights.Ruler) { TimelineRuler(duration, scale, laneWidth) }
                     if (state.markers.isNotEmpty()) {
-                        MarkerLane(state.markers, scale, width, onSeek = { vm.seekTo(it) }, onRemove = { vm.removeMarker(it) })
+                        LaneRow(lead, LaneHeights.Markers) {
+                            MarkerLane(state.markers, scale, laneWidth, onSeek = { vm.seekTo(it) }, onRemove = { vm.removeMarker(it) })
+                        }
                     }
                     trackIds.forEachIndexed { i, track ->
-                        VideoLane(
-                            clips = remember(state.clips, track) { state.clips.filter { it.track == track } },
-                            trackState = state.trackStates[track] ?: TrackState(),
-                            selectedIds = selectedIds, durationMs = state.durationMs, main = i == 0,
-                            scale = scale, width = width,
-                            height = if (i == 0) LaneHeights.Main else LaneHeights.Overlay,
-                            vm = vm, onSeek = { vm.seekTo(it) },
-                        )
+                        val height = if (i == 0) LaneHeights.Main else LaneHeights.Overlay
+                        LaneRow(
+                            lead, height,
+                            leading = {
+                                if (i == 0) {
+                                    Row(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        AddButton(actions.onImport)
+                                        LeadButton(
+                                            if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                                            if (state.muted) "Muet" else "Son", vm::toggleMute,
+                                        )
+                                    }
+                                }
+                            },
+                        ) {
+                            VideoLane(
+                                clips = remember(state.clips, track) { state.clips.filter { it.track == track } },
+                                trackState = state.trackStates[track] ?: TrackState(),
+                                selectedIds = selectedIds, durationMs = state.durationMs, main = i == 0,
+                                scale = scale, width = laneWidth, height = height,
+                                vm = vm, onSeek = { vm.seekTo(it) },
+                            )
+                        }
                     }
-                    TextLane(state.textOverlays, state.selectedTextId, scale, width, LaneHeights.Text, vm, onSeek = { vm.seekTo(it) })
-                    AudioLane(state.audioClips, state.selectedAudioId, scale, width, LaneHeights.Audio, vm, onSeek = { vm.seekTo(it) })
+                    LaneRow(lead, LaneHeights.Text) {
+                        TextLane(state.textOverlays, state.selectedTextId, scale, laneWidth, LaneHeights.Text, vm, onSeek = { vm.seekTo(it) }, onAdd = actions.onAddText)
+                    }
+                    LaneRow(lead, LaneHeights.Audio) {
+                        AudioLane(state.audioClips, state.selectedAudioId, scale, laneWidth, LaneHeights.Audio, vm, onSeek = { vm.seekTo(it) }, onAdd = actions.onAddMusic)
+                    }
                 }
+            }
+            // Fixed playhead.
+            Canvas(Modifier.matchParentSize()) {
+                val x = size.width / 2f
+                drawLine(Color.White, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+                drawCircle(Color.White, 6.dp.toPx(), Offset(x, 7.dp.toPx()))
+                drawCircle(MfColors.Violet, 3.dp.toPx(), Offset(x, 7.dp.toPx()))
             }
         }
         Spacer(Modifier.height(6.dp))
+    }
+}
+
+/** One timeline row: [leading margin | lane]. The margin is part of the row so its buttons stay tappable. */
+@Composable
+private fun LaneRow(lead: Dp, height: Dp, leading: @Composable BoxScope.() -> Unit = {}, content: @Composable () -> Unit) {
+    Row(Modifier.height(height)) {
+        Box(Modifier.width(lead).fillMaxHeight(), content = leading)
+        content()
+    }
+}
+
+@Composable
+private fun AddButton(onClick: () -> Unit) {
+    Box(
+        Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Rounded.Add, "Importer un média", tint = Color.Black, modifier = Modifier.size(26.dp)) }
+}
+
+@Composable
+private fun LeadButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Column(Modifier.pressable(role = null, onClick = onClick).padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = MfColors.TextSecondary, modifier = Modifier.size(20.dp))
+        Text(label, color = MfColors.TextSecondary, fontSize = 10.sp)
     }
 }
 
@@ -212,44 +242,5 @@ private fun TimelineToolbar(
 private fun ToolbarIcon(icon: ImageVector, description: String, tint: Color, onClick: () -> Unit) {
     Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, description, tint = tint, modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
-private fun TrackLabel(track: Int, main: Boolean, ts: TrackState, height: Dp, vm: EditorViewModel) {
-    Column(Modifier.width(LabelWidth).height(height), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Row {
-            LaneIcon(
-                if (ts.hidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                if (ts.hidden) "Afficher la piste" else "Masquer la piste",
-                if (ts.hidden) MfColors.Danger else MfColors.TextSecondary,
-            ) { vm.toggleTrackVisibility(track) }
-            LaneIcon(
-                if (ts.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                if (ts.locked) "Déverrouiller la piste" else "Verrouiller la piste",
-                if (ts.locked) MfColors.Danger else MfColors.TextMuted,
-            ) { vm.toggleTrackLock(track) }
-        }
-        if (main) {
-            LaneIcon(
-                if (ts.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                if (ts.muted) "Réactiver le son de la piste" else "Couper le son de la piste",
-                if (ts.muted) MfColors.Danger else MfColors.TextMuted,
-            ) { vm.toggleTrackMute(track) }
-        }
-    }
-}
-
-@Composable
-private fun StaticLabel(icon: ImageVector, height: Dp) {
-    Box(Modifier.width(LabelWidth).height(height), contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = MfColors.TextMuted, modifier = Modifier.size(15.dp))
-    }
-}
-
-@Composable
-private fun LaneIcon(icon: ImageVector, description: String, tint: Color, onClick: () -> Unit) {
-    Box(Modifier.size(22.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Icon(icon, description, tint = tint, modifier = Modifier.size(14.dp))
     }
 }

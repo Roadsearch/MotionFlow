@@ -72,7 +72,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         TopBar(onBack, { pickVideo() }, { drawer = Drawer.EXPORT }, more, { more = it }, state.clips.any { it.track == 0 })
         Preview(context, state, vm) { pickVideo() }
         TransportBar(state, vm)
-        Timeline(state, vm)
+        Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }))
         if (state.exportProgress != null || state.exportMessage != null) {
             ExportBanner(state.exportProgress, state.exportMessage, vm)
         }
@@ -248,7 +248,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     }
 }
 
-@Composable private fun Timeline(state: EditorUiState, vm: EditorViewModel) { InteractiveTimeline(state, vm) }
+@Composable private fun Timeline(state: EditorUiState, vm: EditorViewModel, actions: TimelineActions) { InteractiveTimeline(state, vm, actions) }
 
 
 @Composable private fun EffectsPanel(state: EditorUiState, vm: EditorViewModel) {

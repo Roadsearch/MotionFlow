@@ -1,6 +1,11 @@
 package com.roadsearch.openeditvideo.ui.timeline
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -217,11 +222,13 @@ internal fun TextLane(
     height: Dp,
     vm: EditorViewModel,
     onSeek: (Long) -> Unit,
+    onAdd: () -> Unit,
 ) {
     Box(
         Modifier.width(width).height(height)
             .pointerInput(scale) { detectTapGestures { p -> onSeek(scale.dpToMs(p.x.toDp().value)) } },
     ) {
+        if (overlays.isEmpty()) GhostLane("Ajouter du texte", onAdd)
         overlays.sortedBy { it.startMs }.forEach { t ->
             key(t.id) {
                 LaneClip(
@@ -257,11 +264,13 @@ internal fun AudioLane(
     height: Dp,
     vm: EditorViewModel,
     onSeek: (Long) -> Unit,
+    onAdd: () -> Unit,
 ) {
     Box(
         Modifier.width(width).height(height)
             .pointerInput(scale) { detectTapGestures { p -> onSeek(scale.dpToMs(p.x.toDp().value)) } },
     ) {
+        if (clips.isEmpty()) GhostLane("Ajouter de la musique", onAdd)
         clips.sortedBy { it.timelineStartMs }.forEach { a ->
             key(a.id) {
                 LaneClip(
@@ -308,5 +317,19 @@ private fun Waveform(seed: Long, modifier: Modifier) {
                 cornerRadius = CornerRadius(barW / 2f),
             )
         }
+    }
+}
+
+/** Empty-track invitation ("+ Ajouter du texte"): occupies the place of the future track. */
+@Composable
+private fun BoxScope.GhostLane(label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.align(Alignment.CenterStart).width(280.dp).fillMaxHeight().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp)).background(MfColors.Card).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Add, null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, color = MfColors.TextSecondary, fontSize = 13.sp)
     }
 }
