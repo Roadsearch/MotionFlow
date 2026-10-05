@@ -40,6 +40,9 @@ import com.roadsearch.openeditvideo.model.*
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 import com.roadsearch.openeditvideo.ui.drawers.Drawer
 import com.roadsearch.openeditvideo.ui.drawers.EditorDrawers
+import com.roadsearch.openeditvideo.ui.drawers.PreviewTexts
+import com.roadsearch.openeditvideo.ui.drawers.TextDraft
+import com.roadsearch.openeditvideo.ui.drawers.TextPanelHost
 import com.roadsearch.openeditvideo.core.TimelineMath
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.compose.runtime.key
@@ -60,17 +63,26 @@ internal val Accent = MfColors.Active
 @Composable
 fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     val state by vm.state.collectAsState(); val context = LocalContext.current
-    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var textDraft by remember { mutableStateOf<TextDraft?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Audio", true) } }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importOverlay(u, displayName(context, u) ?: "Overlay") } }
     fun pickVideo() { videoPicker.launch(arrayOf("video/*", "image/*")) }
     fun pickOverlay() { overlayPicker.launch(arrayOf("video/*", "image/*")) }
     fun pickAudio() { audioPicker.launch(arrayOf("audio/*")) }
+    // Text editing happens in a non-modal panel (see TextPanelHost): turn the drawer request into a draft.
+    LaunchedEffect(drawer) {
+        if (drawer == Drawer.TEXT_NEW || drawer == Drawer.TEXT_EDIT) {
+            val existing = if (drawer == Drawer.TEXT_EDIT) state.textOverlays.firstOrNull { it.id == state.selectedTextId } else null
+            textDraft = TextDraft(existing?.text ?: "Votre texte", existing?.style ?: TextStyleSpec(), existing?.id)
+            vm.setPlaying(false)
+            drawer = null
+        }
+    }
 
-    Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
+    Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
         TopBar(onBack, { pickVideo() }, { drawer = Drawer.EXPORT }, more, { more = it }, state.clips.any { it.track == 0 })
-        Preview(context, state, vm) { pickVideo() }
+        Preview(context, state, vm, textDraft) { pickVideo() }
         TransportBar(state, vm)
         Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }))
         if (state.exportProgress != null || state.exportMessage != null) {
@@ -83,9 +95,19 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
             openDrawer = { drawer = it },
         ))
         AudioPreview(state)
+        }
+        TextPanelHost(
+            draft = textDraft,
+            onChange = { textDraft = it },
+            onConfirm = {
+                textDraft?.let { d -> if (d.targetId != null) vm.updateText(d.targetId, d.text, d.style) else vm.addText(d.text, d.style) }
+                textDraft = null
+            },
+            onCancel = { textDraft = null },
+        )
     }}
 
-    EditorDrawers(drawer, { drawer = null }, state, vm, pickAudioFile = { pickAudio() })
+    EditorDrawers(drawer?.takeUnless { it == Drawer.TEXT_NEW || it == Drawer.TEXT_EDIT }, { drawer = null }, state, vm, pickAudioFile = { pickAudio() })
 
     sheet?.let { tool ->
         ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Panel) {
@@ -167,7 +189,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable private fun ColumnScope.Preview(context: Context, state: EditorUiState, vm: EditorViewModel, onImport: () -> Unit) {
+@Composable private fun ColumnScope.Preview(context: Context, state: EditorUiState, vm: EditorViewModel, textDraft: TextDraft?, onImport: () -> Unit) {
     val latest by rememberUpdatedState(state)
     val mainTrack = remember(state.clips) { state.clips.minOfOrNull { it.track } }
     // The preview shows the clip under the playhead on the lowest video track (not just the selected one).
@@ -234,6 +256,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        PreviewTexts(state, textDraft)
     }
 }
 

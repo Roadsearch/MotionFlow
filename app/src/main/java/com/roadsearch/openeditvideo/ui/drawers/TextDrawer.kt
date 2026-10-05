@@ -59,22 +59,22 @@ import com.roadsearch.openeditvideo.ui.theme.BebasNeue
 import com.roadsearch.openeditvideo.ui.theme.Inter
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 
-private class PresetUi(val preset: TextPreset, val label: String, val font: String, val color: Int)
+internal class PresetUi(val preset: TextPreset, val label: String, val font: String, val color: Int)
 
-private val Presets = listOf(
+internal val Presets = listOf(
     PresetUi(TextPreset.CLASSIC, "Classique", "sans", 0xFFFFFFFF.toInt()),
     PresetUi(TextPreset.NEON, "Néon", "bebas", 0xFFFF4FD8.toInt()),
     PresetUi(TextPreset.SCRIPT, "Manuscrit", "cursive", 0xFFFFFFFF.toInt()),
     PresetUi(TextPreset.BOLD3D, "3D", "bebas", 0xFF19E0F5.toInt()),
 )
 
-private val Fonts = listOf("bebas" to "Bebas Neue", "inter" to "Inter", "sans" to "Sans-serif", "serif" to "Serif", "cursive" to "Cursive")
+internal val Fonts = listOf("bebas" to "Bebas Neue", "inter" to "Inter", "sans" to "Sans-serif", "serif" to "Serif", "cursive" to "Cursive")
 
-private val Palette = listOf(
+internal val Palette = listOf(
     0xFFFFFFFF, 0xFFFF80C8, 0xFFFF4FD8, 0xFFB04DEB, 0xFF4F6BFF, 0xFF19E0F5, 0xFF3DDC84, 0xFFFFD54F,
 ).map { it.toInt() }
 
-private fun familyFor(font: String): FontFamily = when (font) {
+internal fun familyFor(font: String): FontFamily = when (font) {
     "bebas" -> BebasNeue
     "inter" -> Inter
     "serif" -> FontFamily.Serif
@@ -83,7 +83,7 @@ private fun familyFor(font: String): FontFamily = when (font) {
 }
 
 /** Compose approximation of the exported text (the neon glow only exists in this preview). */
-private fun previewStyle(style: TextStyleSpec, sizeSp: Float): TextStyle = TextStyle(
+internal fun previewStyle(style: TextStyleSpec, sizeSp: Float): TextStyle = TextStyle(
     fontFamily = familyFor(style.font),
     color = Color(style.colorArgb),
     fontSize = sizeSp.sp,
