@@ -10,7 +10,7 @@ import com.roadsearch.openeditvideo.ui.EditorViewModel
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 
 /** Contextual bottom drawers of the editor. */
-internal enum class Drawer { AUDIO, TEXT_NEW, TEXT_EDIT, MASK, AI, EXPORT }
+internal enum class Drawer { AUDIO, TEXT_NEW, TEXT_EDIT, MASK, AI, EXPORT, FILTERS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,6 +35,7 @@ internal fun EditorDrawers(
             Drawer.MASK -> MaskDrawer(state, vm, onClose = onDismiss)
             Drawer.AI -> AiToolsDrawer(onClose = onDismiss)
             Drawer.EXPORT -> ExportDrawer(state, vm, onClose = onDismiss)
+            Drawer.FILTERS -> FiltersDrawer(state, vm, onClose = onDismiss)
         }
     }
 }

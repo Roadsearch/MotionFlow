@@ -76,13 +76,12 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         if (state.exportProgress != null || state.exportMessage != null) {
             ExportBanner(state.exportProgress, state.exportMessage, vm)
         }
-        TabPanel(tab, state, vm, TabActions(
+        ContextToolbar(state, vm, TabActions(
             pickVideo = { pickVideo() }, pickAudio = { pickAudio() }, pickOverlay = { pickOverlay() },
             addText = { textDialog = true }, openSheet = { sheet = it },
             clipVolume = { clipVolumeDialog = true }, musicVolume = { musicVolumeDialog = true },
             openDrawer = { drawer = it },
         ))
-        TabBar(tab) { tab = it }
         AudioPreview(state)
     }}
 
