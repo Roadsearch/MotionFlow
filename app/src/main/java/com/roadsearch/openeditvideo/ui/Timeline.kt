@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -55,6 +56,8 @@ import com.roadsearch.openeditvideo.model.timelineEndMs
 import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 import com.roadsearch.openeditvideo.ui.timeline.AudioLane
+import com.roadsearch.openeditvideo.ui.timeline.ClipCapsules
+import com.roadsearch.openeditvideo.ui.timeline.LayersPopover
 import com.roadsearch.openeditvideo.ui.timeline.LaneHeights
 import com.roadsearch.openeditvideo.ui.timeline.MarkerLane
 import com.roadsearch.openeditvideo.ui.timeline.TextLane
@@ -120,6 +123,9 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
 
     val trackIds = remember(state.clips) { state.clips.map { it.track }.distinct().sorted().ifEmpty { listOf(0) } }
     val selectedIds = remember(state.selectedClipId, state.selectedClipIds) { state.selectedClipIds + listOfNotNull(state.selectedClipId) }
+    val selectedClip = state.clips.firstOrNull { it.id == state.selectedClipId }
+    var showLayers by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedClip == null) { if (selectedClip == null) showLayers = false }
 
     Column(Modifier.fillMaxWidth().background(MfColors.Surface)) {
         TimelineToolbar(
@@ -169,6 +175,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
                     }
                 }
             }
+            if (showLayers && selectedClip != null) LayersPopover(state, vm) { showLayers = false }
             // Fixed playhead.
             Canvas(Modifier.matchParentSize()) {
                 val x = size.width / 2f
@@ -177,6 +184,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
                 drawCircle(MfColors.Violet, 3.dp.toPx(), Offset(x, 7.dp.toPx()))
             }
         }
+        ClipCapsules(state, selectedClip, vm) { showLayers = !showLayers }
         Spacer(Modifier.height(6.dp))
     }
 }

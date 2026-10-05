@@ -396,6 +396,22 @@ class EditorViewModel @Inject constructor(
         _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(endMs = end) else it }) }
     }
 
+    /** Swaps the stacking order of two video tracks (clips and their lock/visibility/mute state follow). */
+    fun swapTracks(a: Int, b: Int) {
+        if (a == b) return
+        record()
+        _state.update { s ->
+            val states = s.trackStates.toMutableMap()
+            val sa = states[a]; val sb = states[b]
+            if (sb != null) states[a] = sb else states.remove(a)
+            if (sa != null) states[b] = sa else states.remove(b)
+            s.copy(
+                clips = s.clips.map { c -> when (c.track) { a -> c.copy(track = b); b -> c.copy(track = a); else -> c } },
+                trackStates = states,
+            )
+        }
+    }
+
     fun toggleMute() = _state.update { it.copy(muted = !it.muted) }
     fun setPlaying(value: Boolean) = _state.update { it.copy(playing = value && it.timelineEndMs() > 0L) }
     fun setPosition(position: Long) = _state.update { it.copy(positionMs = position.coerceAtLeast(0L)) }
