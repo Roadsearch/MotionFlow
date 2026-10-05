@@ -26,6 +26,8 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -116,7 +118,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
         snapshotFlow { scroll.value }.drop(1).collect { v ->
             if (viewportPx == 0 || scroll.maxValue == 0 || abs(v - expected) <= 1) return@collect
             if (latest.playing) vm.setPlaying(false)
-            val ms = pxToMs(v)
+            val ms = pxToMs(v).coerceAtMost(latest.timelineEndMs())
             if (ms != latest.positionMs) vm.setPosition(ms)
         }
     }
@@ -131,6 +133,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
         TimelineToolbar(
             snapping = state.snappingEnabled, zoom = state.zoom,
             onSnap = vm::toggleSnapping, onMarker = { vm.addMarkerAtPlayhead() },
+            onToStart = { vm.setPosition(0L) }, onToEnd = { vm.setPosition(state.timelineEndMs()) },
             onZoomOut = { vm.setZoom(state.zoom - .25f) }, onZoomIn = { vm.setZoom(state.zoom + .25f) },
         )
         Box(Modifier.fillMaxWidth().onSizeChanged { viewportPx = it.width }) {
@@ -217,7 +220,7 @@ private fun LeadButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 @Composable
 private fun TimelineToolbar(
     snapping: Boolean, zoom: Float,
-    onSnap: () -> Unit, onMarker: () -> Unit, onZoomOut: () -> Unit, onZoomIn: () -> Unit,
+    onSnap: () -> Unit, onMarker: () -> Unit, onToStart: () -> Unit, onToEnd: () -> Unit, onZoomOut: () -> Unit, onZoomIn: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         val chip = RoundedCornerShape(50)
@@ -234,6 +237,9 @@ private fun TimelineToolbar(
             Spacer(Modifier.width(7.dp))
             Text("Aimant", color = if (snapping) MfColors.Active else MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium)
         }
+        Spacer(Modifier.width(6.dp))
+        ToolbarIcon(Icons.Rounded.SkipPrevious, "Début", MfColors.TextSecondary, onToStart)
+        ToolbarIcon(Icons.Rounded.SkipNext, "Fin", MfColors.TextSecondary, onToEnd)
         Spacer(Modifier.weight(1f))
         ToolbarIcon(Icons.Rounded.Flag, "Ajouter un marqueur", MarkerTint, onMarker)
         Spacer(Modifier.width(4.dp))

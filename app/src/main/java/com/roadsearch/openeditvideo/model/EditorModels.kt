@@ -149,6 +149,9 @@ enum class Tool(val label: String) {
 fun EditorUiState.selectedClip(): VideoClip? = clips.firstOrNull { it.id == selectedClipId }
 fun VideoClip.end(durationMs: Long): Long = if (endMs > startMs) endMs else sourceDurationMs.takeIf { it > startMs } ?: durationMs
 
+/** Source length given to still images so they can be stretched freely on the timeline. */
+const val STILL_SOURCE_MS = 3_600_000L
+
 /** Playable length of an audio clip on the timeline. */
 fun AudioClip.lengthMs(): Long =
     (if (endMs > startMs) endMs - startMs else sourceDurationMs - startMs).coerceAtLeast(250L)

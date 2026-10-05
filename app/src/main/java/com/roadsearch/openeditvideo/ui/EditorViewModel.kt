@@ -612,14 +612,16 @@ class EditorViewModel @Inject constructor(
         val id = System.nanoTime()
         val context = app
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val duration = MediaProbe.durationMs(context, uri).takeIf { it > 0L } ?: 5_000L
+            val probed = MediaProbe.durationMs(context, uri)
+            val duration = probed.takeIf { it > 0L } ?: 5_000L
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
                 record()
                 _state.update { s ->
                     val start = s.positionMs
                     s.copy(
                         clips = s.clips + VideoClip(
-                            id = id, uri = uri, name = name, endMs = duration, sourceDurationMs = duration,
+                            id = id, uri = uri, name = name, endMs = duration,
+                            sourceDurationMs = if (probed > 0L) duration else STILL_SOURCE_MS,
                             track = 1, timelineStartMs = start,
                         ),
                         selectedClipId = id,
@@ -628,6 +630,33 @@ class EditorViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /** Overlay clip: extend its left edge back to time 0 (videos as far as their source allows, stills freely). */
+    fun stretchToStart() = updateSelected { clip, state ->
+        val wanted = clip.timelineStartMs
+        when {
+            wanted <= 0L -> clip
+            clip.sourceDurationMs >= STILL_SOURCE_MS ->
+                clip.copy(timelineStartMs = 0L, endMs = clip.end(state.durationMs) + wanted)
+            else -> {
+                val ext = minOf(clip.startMs, wanted)
+                clip.copy(startMs = clip.startMs - ext, timelineStartMs = clip.timelineStartMs - ext)
+            }
+        }
+    }
+
+    /** Overlay clip: extend its right edge to the end of the main track. */
+    fun stretchToEnd() = updateSelected { clip, state ->
+        val main = state.clips.minOf { it.track }
+        val target = state.clips.filter { it.track == main }
+            .maxOfOrNull { it.timelineStartMs + (it.end(state.durationMs) - it.startMs) } ?: state.timelineEndMs()
+        val currentEnd = clip.timelineStartMs + (clip.end(state.durationMs) - clip.startMs)
+        val need = target - currentEnd
+        if (need <= 0L) clip else {
+            val limit = if (clip.sourceDurationMs > 0L) clip.sourceDurationMs else Long.MAX_VALUE
+            clip.copy(endMs = minOf(clip.end(state.durationMs) + need, limit))
         }
     }
 

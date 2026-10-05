@@ -5,6 +5,14 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
+import com.roadsearch.openeditvideo.ui.editMode
+import com.roadsearch.openeditvideo.ui.EditMode
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,33 +83,77 @@ private fun CapsuleButton(description: String, enabled: Boolean = true, onClick:
     }
 }
 
+/** "Couper et supprimer à gauche / à droite" glyph: playhead bar plus a dashed box on the part that is removed. */
+@Composable
+private fun SplitDeleteIcon(left: Boolean, tint: Color) {
+    Canvas(Modifier.size(22.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 2.dp.toPx()
+        val bar = if (left) w * 0.64f else w * 0.36f
+        drawLine(tint, Offset(bar, h * 0.06f), Offset(bar, h * 0.94f), sw)
+        val x0 = if (left) w * 0.06f else bar + w * 0.1f
+        val x1 = if (left) bar - w * 0.1f else w * 0.94f
+        drawRoundRect(
+            tint, Offset(x0, h * 0.2f), Size(x1 - x0, h * 0.6f), CornerRadius(2.dp.toPx()),
+            style = Stroke(width = sw, pathEffect = PathEffect.dashPathEffect(floatArrayOf(sw * 1.5f, sw * 1.5f))),
+        )
+    }
+}
+
+/** "Étirer jusqu'au début / à la fin" glyph: edge bar with an arrow pointing at it. */
+@Composable
+private fun StretchIcon(toStart: Boolean, tint: Color) {
+    Canvas(Modifier.size(22.dp)) {
+        val w = size.width
+        val h = size.height
+        val sw = 2.dp.toPx()
+        val edge = if (toStart) w * 0.1f else w * 0.9f
+        val dir = if (toStart) 1f else -1f
+        drawLine(tint, Offset(edge, h * 0.12f), Offset(edge, h * 0.88f), sw)
+        drawLine(tint, Offset(edge + dir * w * 0.12f, h * 0.5f), Offset(edge + dir * w * 0.78f, h * 0.5f), sw)
+        drawLine(tint, Offset(edge + dir * w * 0.12f, h * 0.5f), Offset(edge + dir * w * 0.32f, h * 0.3f), sw)
+        drawLine(tint, Offset(edge + dir * w * 0.12f, h * 0.5f), Offset(edge + dir * w * 0.32f, h * 0.7f), sw)
+    }
+}
+
 /**
- * Two floating capsules that straddle the (centre) playhead, shown only while a clip is selected:
- * left = layers / keyframe / cut-start, right = cut-end / delete. Cut and keyframe need the playhead inside the clip.
+ * Two floating capsules that straddle the (centre) playhead while a clip is selected.
+ * Main clip:  left [couches | keyframe | couper+supprimer à gauche]   right [couper+supprimer à droite | supprimer].
+ * Overlay:    left [couches | keyframe | étirer au début | couper+supprimer à gauche]
+ *             right [couper+supprimer à droite | étirer à la fin | supprimer].
+ * Keyframe and cut buttons need the playhead inside the clip; stretch buttons need room to stretch.
  */
 @Composable
 internal fun ClipCapsules(state: EditorUiState, clip: VideoClip?, vm: EditorViewModel, onLayers: () -> Unit) {
     AnimatedVisibility(visible = clip != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-        val inside = clip?.let {
-            val length = TimelineMath.duration(it, it.sourceDurationMs.coerceAtLeast(state.durationMs))
-            state.positionMs > it.timelineStartMs && state.positionMs < it.timelineStartMs + length
-        } ?: false
+        val overlay = state.editMode() == EditMode.OVERLAY_CLIP
+        val length = clip?.let { TimelineMath.duration(it, it.sourceDurationMs.coerceAtLeast(state.durationMs)) } ?: 0L
+        val inside = clip != null && state.positionMs > clip.timelineStartMs && state.positionMs < clip.timelineStartMs + length
+        val main = state.clips.minOfOrNull { it.track }
+        val mainEnd = state.clips.filter { it.track == main }
+            .maxOfOrNull { it.timelineStartMs + TimelineMath.duration(it, it.sourceDurationMs.coerceAtLeast(state.durationMs)) } ?: 0L
+        val canStretchStart = clip != null && clip.timelineStartMs > 0L
+        val canStretchEnd = clip != null && clip.timelineStartMs + length < mainEnd
+        fun tint(enabled: Boolean) = Color.White.copy(alpha = if (enabled) 1f else .35f)
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).padding(end = 8.dp), contentAlignment = Alignment.CenterEnd) {
                 Capsule {
                     CapsuleButton("Couches", onClick = onLayers) { Icon(Icons.Rounded.Layers, null, tint = Color.White) }
-                    CapsuleButton("Ajouter un keyframe", enabled = inside, onClick = { vm.setKeyframeProperty() }) {
-                        Text("◇+", color = Color.White.copy(alpha = if (inside) 1f else .35f), fontSize = 15.sp)
+                    CapsuleButton("Ajouter une image clé", enabled = inside, onClick = { vm.setKeyframeProperty() }) {
+                        Text("◇+", color = tint(inside), fontSize = 15.sp)
                     }
-                    CapsuleButton("Couper le début ici", enabled = inside, onClick = { vm.trimStart() }) {
-                        Icon(Icons.Rounded.FirstPage, null, tint = Color.White.copy(alpha = if (inside) 1f else .35f))
+                    if (overlay) {
+                        CapsuleButton("Étirer jusqu'au début", enabled = canStretchStart, onClick = { vm.stretchToStart() }) { StretchIcon(true, tint(canStretchStart)) }
                     }
+                    CapsuleButton("Couper et supprimer à gauche", enabled = inside, onClick = { vm.trimStart() }) { SplitDeleteIcon(true, tint(inside)) }
                 }
             }
             Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
                 Capsule {
-                    CapsuleButton("Couper la fin ici", enabled = inside, onClick = { vm.trimEnd() }) {
-                        Icon(Icons.AutoMirrored.Rounded.LastPage, null, tint = Color.White.copy(alpha = if (inside) 1f else .35f))
+                    CapsuleButton("Couper et supprimer à droite", enabled = inside, onClick = { vm.trimEnd() }) { SplitDeleteIcon(false, tint(inside)) }
+                    if (overlay) {
+                        CapsuleButton("Étirer jusqu'à la fin", enabled = canStretchEnd, onClick = { vm.stretchToEnd() }) { StretchIcon(false, tint(canStretchEnd)) }
                     }
                     CapsuleButton("Supprimer", onClick = { vm.deleteSelected() }) { Icon(Icons.Rounded.DeleteOutline, null, tint = Color(0xFFFF8A8A)) }
                 }
