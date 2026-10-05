@@ -30,7 +30,8 @@ class ExportSettingsTest {
     @Test
     fun estimateScalesLinearlyWithDuration() {
         val s = ExportSettings()
-        assertEquals(s.estimatedBytes(10_000) * 2, s.estimatedBytes(20_000), 2L)
+        val diff = kotlin.math.abs(s.estimatedBytes(10_000) * 2 - s.estimatedBytes(20_000))
+        assertTrue(diff <= 2L)
     }
 
     @Test
