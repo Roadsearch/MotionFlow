@@ -119,7 +119,7 @@ private fun clipItems(state: EditorUiState, vm: EditorViewModel, a: TabActions, 
         add(ToolItem("Début", Icons.Rounded.FirstPage) { vm.trimStart() })
         add(ToolItem("Fin", Icons.AutoMirrored.Rounded.LastPage) { vm.trimEnd() })
         add(ToolItem("Volume", Icons.AutoMirrored.Rounded.VolumeUp, onClick = a.clipVolume))
-        add(ToolItem("Effets", Icons.Rounded.Tune) { a.openSheet(com.roadsearch.openeditvideo.model.Tool.EFFECTS) })
+        add(ToolItem("Régler", Icons.Rounded.Tune) { a.openSheet(com.roadsearch.openeditvideo.model.Tool.EFFECTS) })
         add(ToolItem("Filtre", Icons.Rounded.PhotoFilter) { a.openDrawer(Drawer.FILTERS) })
         add(ToolItem("Animation", Icons.Rounded.Animation) { a.openSheet(com.roadsearch.openeditvideo.model.Tool.MORE) })
         add(ToolItem("Masque", Icons.Rounded.Crop, selected = mask.enabled) { a.openDrawer(Drawer.MASK) })
@@ -231,4 +231,11 @@ private fun ToolTile(item: ToolItem, boxed: Boolean) {
             maxLines = 2, textAlign = TextAlign.Center, lineHeight = 12.sp,
         )
     }
+}
+
+/** True when a clip is selected and the playhead lies strictly inside it (cuts and keyframes need that). */
+internal fun EditorUiState.selectedClipContainsPlayhead(): Boolean {
+    val clip = clips.firstOrNull { it.id == selectedClipId } ?: return false
+    val length = TimelineMath.duration(clip, clip.sourceDurationMs.coerceAtLeast(durationMs))
+    return positionMs > clip.timelineStartMs && positionMs < clip.timelineStartMs + length
 }

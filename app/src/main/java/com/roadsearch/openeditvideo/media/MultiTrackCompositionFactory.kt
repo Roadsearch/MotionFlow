@@ -80,7 +80,8 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .filter { it.endMs > it.startMs }
             .map { buildAudioSequence(it, durationMs) }
 
-        val outputSize = Size(settings.resolution.width, settings.resolution.height)
+        val (canvasW, canvasH) = settings.canvasSize(state.aspect)
+        val outputSize = Size(canvasW, canvasH)
         val builder = Composition.Builder(videoSequences + audioSequences)
             .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans, outputSize))
         // Frame rate is a ceiling: frames are dropped to reach 24/30 fps; 60 keeps the source rate.

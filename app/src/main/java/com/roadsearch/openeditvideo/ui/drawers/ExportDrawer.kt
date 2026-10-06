@@ -135,7 +135,7 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
 
         SectionLabel("Résolution")
         Segmented(resolutions.map { it.label }, resolutions.indexOf(settings.resolution)) { vm.setExportSettings(settings.copy(resolution = resolutions[it])) }
-        Caption("${settings.resolution.width} × ${settings.resolution.height} px. Les téléphones d'entrée de gamme peuvent refuser le 4K.")
+        Caption("${settings.canvasSize(state.aspect).first} × ${settings.canvasSize(state.aspect).second} px (${state.aspect.label}). Les téléphones d'entrée de gamme peuvent refuser le 4K.")
 
         SectionLabel("Fréquence d'images")
         Segmented(ExportSettings.FPS_OPTIONS.map { "$it" }, ExportSettings.FPS_OPTIONS.indexOf(settings.fps)) {
@@ -154,7 +154,7 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
         Spacer(Modifier.height(12.dp))
         GradientButton("Exporter", enabled = canExport) { vm.exportWith(settings); onClose() }
         Text(
-            if (canExport) "Taille estimée : ≈ ${formatSize(settings.estimatedBytes(durationMs))}" else "Importez une vidéo pour exporter",
+            if (canExport) "Taille estimée : ≈ ${formatSize(settings.estimatedBytesFor(durationMs, state.aspect))}" else "Importez une vidéo pour exporter",
             color = MfColors.TextSecondary, style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )

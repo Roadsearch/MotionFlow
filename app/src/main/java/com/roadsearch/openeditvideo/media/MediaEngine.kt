@@ -178,7 +178,7 @@ class MediaEngine(private val context: Context) {
                     .setEncoderFactory(
                         androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
                             .setRequestedVideoEncoderSettings(
-                                androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(settings.videoBitrate).build(),
+                                androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(settings.bitrateFor(state.aspect)).build(),
                             )
                             .build(),
                     )

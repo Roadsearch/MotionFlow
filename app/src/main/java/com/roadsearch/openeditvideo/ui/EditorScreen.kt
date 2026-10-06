@@ -38,6 +38,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
 import com.roadsearch.openeditvideo.ui.theme.MfColors
+import com.roadsearch.openeditvideo.export.ExportResolution
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.activity.compose.BackHandler
 import com.roadsearch.openeditvideo.ui.drawers.Drawer
 import com.roadsearch.openeditvideo.ui.drawers.EditorDrawers
 import com.roadsearch.openeditvideo.ui.drawers.PreviewTexts
@@ -63,7 +68,7 @@ internal val Accent = MfColors.Active
 @Composable
 fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     val state by vm.state.collectAsState(); val context = LocalContext.current
-    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var textDraft by remember { mutableStateOf<TextDraft?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var fullscreen by remember { mutableStateOf(false) }; var textDraft by remember { mutableStateOf<TextDraft?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Audio", true) } }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importOverlay(u, displayName(context, u) ?: "Overlay") } }
@@ -81,9 +86,16 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     }
 
     Surface(color = Bg, modifier = Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) { Column(Modifier.fillMaxSize()) {
-        TopBar(onBack, { pickVideo() }, { drawer = Drawer.EXPORT }, more, { more = it }, state.clips.any { it.track == 0 })
+        val exportSettings by vm.exportSettings.collectAsState()
+        if (!fullscreen) TopBar(
+            onBack = onBack, onHelp = { drawer = Drawer.HELP },
+            aspect = state.aspect, onAspect = { vm.setAspect(it) },
+            resolution = exportSettings.resolution, onResolution = { vm.setExportSettings(exportSettings.copy(resolution = it)) },
+            onExport = { drawer = Drawer.EXPORT }, canExport = state.clips.any { it.track == 0 },
+        )
         Preview(context, state, vm, textDraft) { pickVideo() }
-        TransportBar(state, vm)
+        if (!fullscreen) {
+        TransportBar(state, vm, onFullscreen = { fullscreen = true })
         Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }))
         if (state.exportProgress != null || state.exportMessage != null) {
             ExportBanner(state.exportProgress, state.exportMessage, vm)
@@ -94,8 +106,10 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
             clipVolume = { clipVolumeDialog = true }, musicVolume = { musicVolumeDialog = true },
             openDrawer = { drawer = it },
         ))
+        }
         AudioPreview(state)
         }
+        if (fullscreen) FullscreenControls(state, vm) { fullscreen = false }
         TextPanelHost(
             draft = textDraft,
             onChange = { textDraft = it },
@@ -160,20 +174,32 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     }
 }
 
-@Composable private fun TopBar(onBack: () -> Unit, onImport: () -> Unit, onExport: () -> Unit, more: Boolean, setMore: (Boolean) -> Unit, canExport: Boolean) {
+@Composable private fun TopBar(
+    onBack: () -> Unit, onHelp: () -> Unit,
+    aspect: AspectRatio, onAspect: (AspectRatio) -> Unit,
+    resolution: ExportResolution, onResolution: (ExportResolution) -> Unit,
+    onExport: () -> Unit, canExport: Boolean,
+) {
+    var aspectMenu by remember { mutableStateOf(false) }
+    var resolutionMenu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBack) { Icon(Icons.Rounded.Close, "Fermer", tint = Color.White) }
+        IconButton(onHelp) { Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Aide", tint = Color.White) }
         Spacer(Modifier.weight(1f))
-        Box(Modifier.clip(RoundedCornerShape(10.dp)).background(Card).padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text("1080p · 30", color = Muted, style = MaterialTheme.typography.labelMedium)
-        }
         Box {
-            IconButton({ setMore(true) }) { Icon(Icons.Rounded.MoreVert, "Plus", tint = Color.White) }
-            DropdownMenu(more, { setMore(false) }) {
-                DropdownMenuItem({ Text("Importer un média") }, leadingIcon = { Icon(Icons.Rounded.VideoLibrary, null) }, onClick = { setMore(false); onImport() })
-                DropdownMenuItem({ Text("Exporter") }, leadingIcon = { Icon(Icons.Rounded.FileUpload, null) }, enabled = canExport, onClick = { setMore(false); onExport() })
+            TopPill(aspect.label) { aspectMenu = true }
+            DropdownMenu(aspectMenu, { aspectMenu = false }) {
+                AspectRatio.entries.forEach { a -> DropdownMenuItem({ Text(a.label) }, onClick = { onAspect(a); aspectMenu = false }) }
             }
         }
+        Spacer(Modifier.width(6.dp))
+        Box {
+            TopPill(resolution.label.lowercase()) { resolutionMenu = true }
+            DropdownMenu(resolutionMenu, { resolutionMenu = false }) {
+                ExportResolution.entries.forEach { r -> DropdownMenuItem({ Text(r.label.lowercase()) }, onClick = { onResolution(r); resolutionMenu = false }) }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
         Box(
             Modifier.height(34.dp).clip(RoundedCornerShape(10.dp))
                 .background(
@@ -185,6 +211,31 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
             contentAlignment = Alignment.Center,
         ) { Text("Exporter", color = if (canExport) Color.White else Muted, style = MaterialTheme.typography.labelLarge) }
         Spacer(Modifier.width(8.dp))
+    }
+}
+
+@Composable private fun TopPill(label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(10.dp)).background(Card).clickable(onClick = onClick).padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = Color.White, style = MaterialTheme.typography.labelMedium)
+        Icon(Icons.Rounded.ArrowDropDown, null, tint = Muted, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable private fun BoxScope.FullscreenControls(state: EditorUiState, vm: EditorViewModel, onExit: () -> Unit) {
+    BackHandler(onBack = onExit)
+    IconButton(onExit, Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)) {
+        Icon(Icons.Rounded.FullscreenExit, "Quitter le plein écran", tint = Color.White)
+    }
+    Box(
+        Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).size(56.dp)
+            .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = .5f))
+            .clickable { vm.setPlaying(!state.playing) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (state.playing) "Pause" else "Lecture", tint = Color.White, modifier = Modifier.size(32.dp))
     }
 }
 
@@ -220,9 +271,11 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
         }
     }
 
+    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        val ratio = state.aspect.w.toFloat() / state.aspect.h
+        val fitWidth = if (maxWidth / maxHeight > ratio) maxHeight * ratio else maxWidth
     Box(
-        Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp)).background(Color.Black),
+        Modifier.width(fitWidth).height(fitWidth / ratio).clip(RoundedCornerShape(16.dp)).background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
         if (state.clips.isEmpty()) {
@@ -257,6 +310,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
             )
         }
         PreviewTexts(state, textDraft)
+    }
     }
 }
 

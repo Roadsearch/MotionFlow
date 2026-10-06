@@ -120,6 +120,7 @@ data class EditorUiState(
     val selectedClipId: Long? = null,
     val selectedClipIds: Set<Long> = emptySet(),
     val selectedAudioId: Long? = null,
+    val aspect: AspectRatio = AspectRatio.PORTRAIT,
     val selectedTextId: Long? = null,
     val playing: Boolean = false,
     val positionMs: Long = 0L,
@@ -181,4 +182,12 @@ fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
 fun VideoClip.keyframesAt(timelinePositionMs: Long): Keyframe {
     val local = (timelinePositionMs - timelineStartMs + startMs).coerceAtLeast(startMs)
     return if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() || animation.opacity.isNotEmpty()) animation.at(local) else keyframes.interpolate(local)
+}
+
+/** Canvas shape of the project (preview and export). */
+@Serializable
+enum class AspectRatio(val label: String, val w: Int, val h: Int) {
+    PORTRAIT("9:16", 9, 16),
+    LANDSCAPE("16:9", 16, 9),
+    SQUARE("1:1", 1, 1),
 }

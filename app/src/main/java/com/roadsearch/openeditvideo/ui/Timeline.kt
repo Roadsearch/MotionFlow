@@ -132,6 +132,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
     Column(Modifier.fillMaxWidth().background(MfColors.Surface)) {
         TimelineToolbar(
             snapping = state.snappingEnabled, zoom = state.zoom,
+            timeLabel = "${formatTime(state.positionMs)}.${(state.positionMs % 1000) / 100} / ${formatTime(state.timelineEndMs())}",
             onSnap = vm::toggleSnapping, onMarker = { vm.addMarkerAtPlayhead() },
             onToStart = { vm.setPosition(0L) }, onToEnd = { vm.setPosition(state.timelineEndMs()) },
             onZoomOut = { vm.setZoom(state.zoom - .25f) }, onZoomIn = { vm.setZoom(state.zoom + .25f) },
@@ -219,7 +220,7 @@ private fun LeadButton(icon: ImageVector, label: String, onClick: () -> Unit) {
 
 @Composable
 private fun TimelineToolbar(
-    snapping: Boolean, zoom: Float,
+    snapping: Boolean, zoom: Float, timeLabel: String,
     onSnap: () -> Unit, onMarker: () -> Unit, onToStart: () -> Unit, onToEnd: () -> Unit, onZoomOut: () -> Unit, onZoomIn: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -237,17 +238,14 @@ private fun TimelineToolbar(
             Spacer(Modifier.width(7.dp))
             Text("Aimant", color = if (snapping) MfColors.Active else MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium)
         }
-        Spacer(Modifier.width(6.dp))
-        ToolbarIcon(Icons.Rounded.SkipPrevious, "Début", MfColors.TextSecondary, onToStart)
-        ToolbarIcon(Icons.Rounded.SkipNext, "Fin", MfColors.TextSecondary, onToEnd)
-        Spacer(Modifier.weight(1f))
-        ToolbarIcon(Icons.Rounded.Flag, "Ajouter un marqueur", MarkerTint, onMarker)
         Spacer(Modifier.width(4.dp))
-        ToolbarIcon(Icons.Rounded.Remove, "Zoom arrière", MfColors.TextSecondary, onZoomOut)
+        ToolbarIcon(Icons.Rounded.SkipPrevious, "Début", MfColors.TextSecondary, onToStart)
         Text(
-            "${"%.1f".format(zoom)}×", color = MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.width(36.dp), textAlign = TextAlign.Center,
+            timeLabel, color = MfColors.TextSecondary, fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
         )
+        ToolbarIcon(Icons.Rounded.SkipNext, "Fin", MfColors.TextSecondary, onToEnd)
+        ToolbarIcon(Icons.Rounded.Remove, "Zoom arrière", MfColors.TextSecondary, onZoomOut)
         ToolbarIcon(Icons.Rounded.Add, "Zoom avant", MfColors.TextSecondary, onZoomIn)
     }
 }

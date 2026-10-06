@@ -55,18 +55,21 @@ internal class TabActions(
 )
 
 @Composable
-internal fun TransportBar(state: EditorUiState, vm: EditorViewModel) {
+internal fun TransportBar(state: EditorUiState, vm: EditorViewModel, onFullscreen: () -> Unit) {
     val end = remember(state.clips, state.audioClips, state.textOverlays) { state.timelineEndMs() }
+    val canKeyframe = state.selectedClipContainsPlayhead()
     Row(
-        Modifier.fillMaxWidth().background(Bg).height(46.dp).padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().background(Bg).height(46.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "${formatTime(state.positionMs)} / ${formatTime(end)}",
-            color = Muted,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            IconButton({ vm.undo() }, enabled = vm.canUndo()) {
+                Icon(Icons.AutoMirrored.Rounded.Undo, "Annuler", tint = if (vm.canUndo()) Color.White else Muted)
+            }
+            IconButton({ vm.redo() }, enabled = vm.canRedo()) {
+                Icon(Icons.AutoMirrored.Rounded.Redo, "Rétablir", tint = if (vm.canRedo()) Color.White else Muted)
+            }
+        }
         Box(
             Modifier.size(44.dp).clip(CircleShape).clickable(enabled = end > 0L) {
                 if (!state.playing && state.positionMs >= end - 50L) vm.seekTo(0L)
@@ -82,19 +85,12 @@ internal fun TransportBar(state: EditorUiState, vm: EditorViewModel) {
             )
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            IconButton({ vm.undo() }, enabled = vm.canUndo()) {
-                Icon(Icons.AutoMirrored.Rounded.Undo, "Annuler", tint = if (vm.canUndo()) Color.White else Muted)
+            if (state.selectedClipId != null) {
+                IconButton({ vm.setKeyframeProperty() }, enabled = canKeyframe) {
+                    Text("◇+", color = if (canKeyframe) Color.White else Muted, fontSize = 16.sp)
+                }
             }
-            IconButton({ vm.redo() }, enabled = vm.canRedo()) {
-                Icon(Icons.AutoMirrored.Rounded.Redo, "Rétablir", tint = if (vm.canRedo()) Color.White else Muted)
-            }
-            IconButton(vm::toggleMute) {
-                Icon(
-                    if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                    "Son",
-                    tint = if (state.muted) Accent else Color.White,
-                )
-            }
+            IconButton(onFullscreen) { Icon(Icons.Rounded.Fullscreen, "Plein écran", tint = Color.White) }
         }
     }
 }

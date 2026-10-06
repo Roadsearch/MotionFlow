@@ -412,6 +412,12 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun setAspect(aspect: AspectRatio) {
+        if (_state.value.aspect == aspect) return
+        record()
+        _state.update { it.copy(aspect = aspect) }
+    }
+
     fun toggleMute() = _state.update { it.copy(muted = !it.muted) }
     fun setPlaying(value: Boolean) = _state.update { it.copy(playing = value && it.timelineEndMs() > 0L) }
     fun setPosition(position: Long) = _state.update { it.copy(positionMs = position.coerceAtLeast(0L)) }

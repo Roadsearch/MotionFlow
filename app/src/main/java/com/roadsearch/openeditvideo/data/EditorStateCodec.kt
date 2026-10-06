@@ -17,6 +17,7 @@ object EditorStateCodec {
         put("audio", JSONArray().apply { state.audioClips.forEach { put(audio(it)) } })
         put("text", JSONArray().apply { state.textOverlays.forEach { put(text(it)) } })
         put("effects", effects(state.effects))
+        put("aspect", state.aspect.name)
         put("transitions", JSONArray().apply { state.transitions.forEach { put(transition(it)) } })
         put("easing", state.easing.name)
         put("zoom", state.zoom.toDouble())
@@ -105,6 +106,7 @@ object EditorStateCodec {
             activeTool = Tool.MEDIA,
             effects = readEffects(root.optJSONObject("effects") ?: JSONObject()),
             transitions = transitions,
+            aspect = runCatching { AspectRatio.valueOf(root.optString("aspect")) }.getOrDefault(AspectRatio.PORTRAIT),
             easing = runCatching { Easing.valueOf(root.optString("easing", Easing.LINEAR.name)) }.getOrDefault(Easing.LINEAR),
             masks = masks,
             blendModes = blendModes,
