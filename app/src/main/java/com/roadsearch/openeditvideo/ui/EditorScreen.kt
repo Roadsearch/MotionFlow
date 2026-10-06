@@ -184,7 +184,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     var resolutionMenu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBack) { Icon(Icons.Rounded.Close, "Fermer", tint = Color.White) }
-        IconButton(onHelp) { Icon(Icons.AutoMirrored.Rounded.HelpOutline, "Aide", tint = Color.White) }
+        IconButton(onHelp) { Icon(Icons.Rounded.HelpOutline, "Aide", tint = Color.White) }
         Spacer(Modifier.weight(1f))
         Box {
             TopPill(aspect.label) { aspectMenu = true }
