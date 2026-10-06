@@ -59,6 +59,7 @@ import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 import com.roadsearch.openeditvideo.ui.timeline.AudioLane
 import com.roadsearch.openeditvideo.ui.timeline.ClipCapsules
+import com.roadsearch.openeditvideo.ui.timeline.CoverTile
 import com.roadsearch.openeditvideo.ui.timeline.LayersPopover
 import com.roadsearch.openeditvideo.ui.timeline.LaneHeights
 import com.roadsearch.openeditvideo.ui.timeline.MarkerLane
@@ -77,6 +78,7 @@ internal class TimelineActions(
     val onImport: () -> Unit,
     val onAddMusic: () -> Unit,
     val onAddText: () -> Unit,
+    val onCover: () -> Unit,
 )
 
 /**
@@ -158,6 +160,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
                                             if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
                                             if (state.muted) "Muet" else "Son", vm::toggleMute,
                                         )
+                                        CoverTile(state, actions.onCover)
                                     }
                                 }
                             },

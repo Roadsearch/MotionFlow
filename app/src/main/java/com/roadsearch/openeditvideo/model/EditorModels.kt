@@ -121,6 +121,7 @@ data class EditorUiState(
     val selectedClipIds: Set<Long> = emptySet(),
     val selectedAudioId: Long? = null,
     val aspect: AspectRatio = AspectRatio.PORTRAIT,
+    val coverMs: Long = 0L,
     val selectedTextId: Long? = null,
     val playing: Boolean = false,
     val positionMs: Long = 0L,

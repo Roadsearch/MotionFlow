@@ -40,6 +40,13 @@ class HomeViewModel @Inject constructor(
         val clips = doc?.clips.orEmpty()
         val duration = clips.maxOfOrNull { it.timelineStartMs + TimelineMath.duration(it, it.sourceDurationMs) } ?: 0L
         val first = clips.filter { it.track == 0 }.minByOrNull { it.timelineStartMs } ?: clips.firstOrNull()
-        return RecentProject(id, name, duration, "1080p", updatedAt, first?.uri)
+        val cover = doc?.coverMs ?: 0L
+        val mainTrack = clips.minOfOrNull { it.track }
+        val coverClip = clips.filter { it.track == mainTrack }.firstOrNull { c ->
+            val length = TimelineMath.duration(c, c.sourceDurationMs.coerceAtLeast(doc?.durationMs ?: 0L))
+            cover >= c.timelineStartMs && cover < c.timelineStartMs + length
+        } ?: first
+        val thumbMs = coverClip?.let { it.startMs + (cover - it.timelineStartMs).coerceAtLeast(0L) } ?: 0L
+        return RecentProject(id, name, duration, "1080p", updatedAt, coverClip?.uri, thumbMs)
     }
 }

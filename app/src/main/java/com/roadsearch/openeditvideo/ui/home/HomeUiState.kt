@@ -11,6 +11,7 @@ data class RecentProject(
     val resolutionLabel: String,
     val updatedAt: Long,
     val thumbnailUri: Uri?,
+    val thumbnailMs: Long = 0L,
 )
 
 @Immutable

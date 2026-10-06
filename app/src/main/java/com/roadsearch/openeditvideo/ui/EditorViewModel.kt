@@ -412,6 +412,9 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    /** Project cover = the frame of the main track at [ms] (shown in the Home list). */
+    fun setCover(ms: Long) = _state.update { it.copy(coverMs = ms.coerceAtLeast(0L)) }
+
     fun setAspect(aspect: AspectRatio) {
         if (_state.value.aspect == aspect) return
         record()

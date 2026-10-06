@@ -175,7 +175,7 @@ fun ProjectThumbnail(project: RecentProject, modifier: Modifier = Modifier) {
         Icon(Icons.Rounded.VideoLibrary, null, tint = Color.White.copy(alpha = .55f), modifier = Modifier.size(22.dp))
         val uri = project.thumbnailUri
         if (uri != null) {
-            val request = remember(uri) { ImageRequest.Builder(context).data(uri).videoFrameMillis(0L).build() }
+            val request = remember(uri, project.thumbnailMs) { ImageRequest.Builder(context).data(uri).videoFrameMillis(project.thumbnailMs).build() }
             AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
