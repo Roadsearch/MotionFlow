@@ -53,9 +53,12 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .filter { state.trackStates[it.track]?.hidden != true }
             .sortedWith(compareBy<VideoClip> { it.track }.thenBy { it.timelineStartMs }.thenBy { it.id })
         require(clips.isNotEmpty()) { "Aucun clip vidéo à exporter" }
+        // Transitions become opacity ramps (and extra source frames for cross-fades).
+        val prepared = TransitionRenderPlan.prepare(state.transitions, clips)
+        val renderClips = prepared.clips.sortedWith(compareBy<VideoClip> { it.track }.thenBy { it.timelineStartMs }.thenBy { it.id })
         val durationMs = maxOf(
             state.durationMs,
-            clips.maxOf { it.timelineStartMs + clipDurationMs(it) },
+            renderClips.maxOf { it.timelineStartMs + clipDurationMs(it) },
             state.audioClips.maxOfOrNull { it.timelineStartMs + audioDurationMs(it) } ?: 0L,
             state.textOverlays.maxOfOrNull { it.endMs } ?: 0L,
         )
@@ -63,7 +66,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
 
         val videoPlans = buildList<VideoInputPlan> {
             add(VideoInputPlan.Background(durationMs))
-            clips.forEach { add(VideoInputPlan.Clip(it, clipDurationMs(it))) }
+            renderClips.forEach { add(VideoInputPlan.Clip(it, clipDurationMs(it), prepared.fades[it.id])) }
             state.textOverlays
                 .filter { it.endMs > it.startMs && it.text.isNotBlank() }
                 .forEach { add(VideoInputPlan.Text(it)) }
@@ -201,7 +204,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
 
 private sealed interface VideoInputPlan {
     data class Background(val durationMs: Long) : VideoInputPlan
-    data class Clip(val clip: VideoClip, val durationMs: Long) : VideoInputPlan
+    data class Clip(val clip: VideoClip, val durationMs: Long, val fades: TransitionRenderPlan.ClipFades? = null) : VideoInputPlan
     data class Text(val overlay: TextOverlayModel) : VideoInputPlan
 }
 
@@ -230,7 +233,7 @@ private class TimelineVideoCompositorSettings(
                     .setOverlayFrameAnchor(0f, 0f)
                     .setScale(scale, scale)
                     .setRotationDegrees(clip.effects.rotation + keyframe.rotation)
-                    .setAlphaScale(keyframe.opacity.coerceIn(0f, 1f))
+                    .setAlphaScale(keyframe.opacity.coerceIn(0f, 1f) * (plan.fades?.factor(globalMs) ?: 1f))
                     .build()
             }
             is VideoInputPlan.Text -> {

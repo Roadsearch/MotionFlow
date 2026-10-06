@@ -115,7 +115,7 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
     val durationMs = remember(state.clips, state.audioClips, state.textOverlays) { state.timelineEndMs() }
     val first = remember(state.clips) { state.clips.filter { it.track == 0 }.minByOrNull { it.timelineStartMs } }
     val canExport = first != null
-    val blockingTransitions = state.transitions.count { it.type != TransitionType.CUT }
+    val blockingTransitions = state.transitions.count { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }
     val hasBlend = state.blendModes.any { it.value != BlendMode.NORMAL }
     val canRun = canExport && blockingTransitions == 0
     val context = LocalContext.current
@@ -163,12 +163,12 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x22FF5C7A)).padding(12.dp),
             ) {
                 Text(
-                    "Export impossible : $blockingTransitions transition(s) dans le projet. Le moteur ne sait pas encore les rendre.",
+                    "Export impossible : $blockingTransitions transition(s) de type balayage. Le moteur ne sait pas encore les rendre (les fondus, eux, sont pris en charge).",
                     color = MfColors.Danger, style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    "Retirer les transitions", color = Color.White, style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { vm.clearTransitions() },
+                    "Retirer les balayages", color = Color.White, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { vm.clearWipeTransitions() },
                 )
             }
             Spacer(Modifier.height(10.dp))

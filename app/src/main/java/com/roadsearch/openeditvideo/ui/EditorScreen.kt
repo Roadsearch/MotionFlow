@@ -38,6 +38,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.roadsearch.openeditvideo.model.*
 import com.roadsearch.openeditvideo.ui.theme.MfColors
+import com.roadsearch.openeditvideo.media.TransitionRenderPlan
 import com.roadsearch.openeditvideo.export.ExportResolution
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -252,6 +253,13 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
         }
     }
 
+    // Dip-to-black transitions are previewed exactly; cross-fades are only rendered at export.
+    val fadeAlpha = remember(state.transitions, state.clips, clip, state.positionMs) {
+        if (clip == null || state.transitions.isEmpty()) 1f
+        else TransitionRenderPlan.prepare(state.transitions, state.clips.filter { it.track == clip.track }, includeCrossFade = false)
+            .fades[clip.id]?.factor(state.positionMs) ?: 1f
+    }
+
     // Master clock: advances the playhead through clips, gaps, audio-only and text-only sections alike.
     // Players follow the clock; they no longer overwrite the position (that made scrubbing impossible).
     LaunchedEffect(state.playing) {
@@ -310,6 +318,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        if (fadeAlpha < 1f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 1f - fadeAlpha)))
         PreviewTexts(state, textDraft)
     }
     }

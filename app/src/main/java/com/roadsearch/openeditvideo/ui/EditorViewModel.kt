@@ -430,7 +430,13 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    /** Removes every transition (the export engine cannot render them yet). */
+    /** Removes the wipe transitions (the only kind the export engine cannot render). */
+    fun clearWipeTransitions() {
+        record()
+        _state.update { s -> s.copy(transitions = s.transitions.filterNot { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }) }
+    }
+
+    /** Removes every transition. */
     fun clearTransitions() {
         record()
         _state.update { it.copy(transitions = emptyList()) }
