@@ -124,7 +124,11 @@ private fun clipItems(state: EditorUiState, vm: EditorViewModel, a: TabActions, 
         add(ToolItem("Animation", Icons.Rounded.Animation) { a.openSheet(com.roadsearch.openeditvideo.model.Tool.MORE) })
         add(ToolItem("Masque", Icons.Rounded.Crop, selected = mask.enabled) { a.openDrawer(Drawer.MASK) })
         add(ToolItem("Fond vert", Icons.Rounded.Palette, selected = key.enabled) { vm.setChromaKey(key.copy(enabled = !key.enabled)) })
-        if (!overlay) add(ToolItem("Transition", Icons.Rounded.SwapHoriz) { vm.addTransition() })
+        if (!overlay) {
+            val ordered = state.clips.filter { it.track == clip.track }.sortedBy { it.timelineStartMs }
+            val next = ordered.getOrNull(ordered.indexOfFirst { it.id == clip.id } + 1)
+            add(ToolItem("Transition", Icons.Rounded.SwapHoriz, enabled = next != null) { next?.let { a.openTransition(clip.id, it.id) } })
+        }
         if (overlay) {
             add(ToolItem("Mélanger", Icons.Rounded.Layers) { a.openDrawer(Drawer.MASK) })
             add(

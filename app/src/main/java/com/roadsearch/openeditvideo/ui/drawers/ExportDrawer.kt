@@ -2,6 +2,7 @@ package com.roadsearch.openeditvideo.ui.drawers
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +44,9 @@ import coil3.request.ImageRequest
 import coil3.video.videoFrameMillis
 import com.roadsearch.openeditvideo.export.ExportResolution
 import com.roadsearch.openeditvideo.export.ExportSettings
+import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
+import com.roadsearch.openeditvideo.model.TransitionType
 import com.roadsearch.openeditvideo.model.timelineEndMs
 import com.roadsearch.openeditvideo.ui.EditorViewModel
 import com.roadsearch.openeditvideo.ui.components.pressable
@@ -112,6 +115,9 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
     val durationMs = remember(state.clips, state.audioClips, state.textOverlays) { state.timelineEndMs() }
     val first = remember(state.clips) { state.clips.filter { it.track == 0 }.minByOrNull { it.timelineStartMs } }
     val canExport = first != null
+    val blockingTransitions = state.transitions.count { it.type != TransitionType.CUT }
+    val hasBlend = state.blendModes.any { it.value != BlendMode.NORMAL }
+    val canRun = canExport && blockingTransitions == 0
     val context = LocalContext.current
     val resolutions = ExportResolution.entries
 
@@ -152,7 +158,25 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
         SwitchRow("Qualité élevée", "Débit vidéo plus élevé, fichier plus lourd", settings.highQuality, true) { vm.setExportSettings(settings.copy(highQuality = it)) }
 
         Spacer(Modifier.height(12.dp))
-        GradientButton("Exporter", enabled = canExport) { vm.exportWith(settings); onClose() }
+        if (blockingTransitions > 0) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x22FF5C7A)).padding(12.dp),
+            ) {
+                Text(
+                    "Export impossible : $blockingTransitions transition(s) dans le projet. Le moteur ne sait pas encore les rendre.",
+                    color = MfColors.Danger, style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "Retirer les transitions", color = Color.White, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).clickable { vm.clearTransitions() },
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+        } else if (hasBlend) {
+            Caption("Modes de fusion actifs : l'export peut échouer si le moteur FFmpeg optionnel n'est pas installé.")
+            Spacer(Modifier.height(6.dp))
+        }
+        GradientButton("Exporter", enabled = canRun) { vm.exportWith(settings); onClose() }
         Text(
             if (canExport) "Taille estimée : ≈ ${formatSize(settings.estimatedBytesFor(durationMs, state.aspect))}" else "Importez une vidéo pour exporter",
             color = MfColors.TextSecondary, style = MaterialTheme.typography.bodySmall,

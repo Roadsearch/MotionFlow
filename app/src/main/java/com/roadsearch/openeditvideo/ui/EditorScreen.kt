@@ -68,7 +68,7 @@ internal val Accent = MfColors.Active
 @Composable
 fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     val state by vm.state.collectAsState(); val context = LocalContext.current
-    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var fullscreen by remember { mutableStateOf(false) }; var textDraft by remember { mutableStateOf<TextDraft?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
+    var more by remember { mutableStateOf(false) }; var sheet by remember { mutableStateOf<Tool?>(null) }; var drawer by remember { mutableStateOf<Drawer?>(null) }; var fullscreen by remember { mutableStateOf(false) }; var transitionPair by remember { mutableStateOf<Pair<Long, Long>?>(null) }; var textDraft by remember { mutableStateOf<TextDraft?>(null) }; var textDialog by remember { mutableStateOf(false) }; var tab by remember { mutableStateOf(EditTab.EDIT) }; var clipVolumeDialog by remember { mutableStateOf(false) }; var musicVolumeDialog by remember { mutableStateOf(false) }
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Video") } }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.import(u, displayName(context, u) ?: "Audio", true) } }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let { u -> vm.importOverlay(u, displayName(context, u) ?: "Overlay") } }
@@ -96,7 +96,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         Preview(context, state, vm, textDraft) { pickVideo() }
         if (!fullscreen) {
         TransportBar(state, vm, onFullscreen = { fullscreen = true })
-        Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }, onCover = { drawer = Drawer.COVER }))
+        Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }, onCover = { drawer = Drawer.COVER }, onTransition = { f, t -> transitionPair = f to t; drawer = Drawer.TRANSITION }))
         if (state.exportProgress != null || state.exportMessage != null) {
             ExportBanner(state.exportProgress, state.exportMessage, vm)
         }
@@ -105,6 +105,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
             addText = { textDialog = true }, openSheet = { sheet = it },
             clipVolume = { clipVolumeDialog = true }, musicVolume = { musicVolumeDialog = true },
             openDrawer = { drawer = it },
+            openTransition = { f, t -> transitionPair = f to t; drawer = Drawer.TRANSITION },
         ))
         }
         AudioPreview(state)
@@ -121,7 +122,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         )
     }}
 
-    EditorDrawers(drawer?.takeUnless { it == Drawer.TEXT_NEW || it == Drawer.TEXT_EDIT }, { drawer = null }, state, vm, pickAudioFile = { pickAudio() })
+    EditorDrawers(drawer?.takeUnless { it == Drawer.TEXT_NEW || it == Drawer.TEXT_EDIT }, { drawer = null }, state, vm, pickAudioFile = { pickAudio() }, transitionPair = transitionPair)
 
     sheet?.let { tool ->
         ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Panel) {

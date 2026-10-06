@@ -421,6 +421,21 @@ class EditorViewModel @Inject constructor(
         _state.update { it.copy(aspect = aspect) }
     }
 
+    /** Sets (or, with CUT, removes) the transition between two adjacent main-track clips. */
+    fun setTransition(fromId: Long, toId: Long, type: TransitionType, durationMs: Long) {
+        record()
+        _state.update { s ->
+            val rest = s.transitions.filterNot { it.fromClipId == fromId || it.toClipId == toId }
+            s.copy(transitions = if (type == TransitionType.CUT) rest else rest + Transition(System.nanoTime(), fromId, toId, durationMs.coerceIn(100L, 3_000L), type))
+        }
+    }
+
+    /** Removes every transition (the export engine cannot render them yet). */
+    fun clearTransitions() {
+        record()
+        _state.update { it.copy(transitions = emptyList()) }
+    }
+
     fun toggleMute() = _state.update { it.copy(muted = !it.muted) }
     fun setPlaying(value: Boolean) = _state.update { it.copy(playing = value && it.timelineEndMs() > 0L) }
     fun setPosition(position: Long) = _state.update { it.copy(positionMs = position.coerceAtLeast(0L)) }

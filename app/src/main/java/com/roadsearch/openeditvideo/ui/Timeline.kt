@@ -79,6 +79,7 @@ internal class TimelineActions(
     val onAddMusic: () -> Unit,
     val onAddText: () -> Unit,
     val onCover: () -> Unit,
+    val onTransition: (Long, Long) -> Unit,
 )
 
 /**
@@ -171,6 +172,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
                                 selectedIds = selectedIds, durationMs = state.durationMs, main = i == 0,
                                 scale = scale, width = laneWidth, height = height,
                                 vm = vm, onSeek = { vm.seekTo(it) },
+                                transitions = state.transitions, onTransition = actions.onTransition,
                             )
                         }
                     }

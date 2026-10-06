@@ -95,6 +95,13 @@ internal fun MaskDrawer(state: EditorUiState, vm: EditorViewModel, onClose: () -
         }
         DrawerTabs(listOf("Masque", "Fusion", "Chromakey"), tab) { tab = it }
         Spacer(Modifier.height(10.dp))
+        if (tab == 1) {
+            Text(
+                "Les modes autres que « Normal » demandent le moteur FFmpeg optionnel pour l'export.",
+                color = MfColors.TextMuted, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
         when (tab) {
             0 -> MaskTab(state.masks[clip.id] ?: MaskSettings(), clip.id, vm)
             1 -> {

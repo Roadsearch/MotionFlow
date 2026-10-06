@@ -46,6 +46,9 @@ import androidx.compose.ui.unit.sp
 import com.roadsearch.openeditvideo.model.AudioClip
 import com.roadsearch.openeditvideo.model.TextOverlay
 import com.roadsearch.openeditvideo.model.TrackState
+import com.roadsearch.openeditvideo.model.Transition
+import com.roadsearch.openeditvideo.model.TransitionType
+import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.end
 import com.roadsearch.openeditvideo.model.lengthMs
@@ -156,6 +159,8 @@ internal fun VideoLane(
     height: Dp,
     vm: EditorViewModel,
     onSeek: (Long) -> Unit,
+    transitions: List<Transition> = emptyList(),
+    onTransition: (Long, Long) -> Unit = { _, _ -> },
 ) {
     val locked = trackState.locked
     Box(
@@ -200,6 +205,21 @@ internal fun VideoLane(
                         val x = scale.msToDp((k.timeMs - clip.startMs).coerceAtLeast(0L)).coerceIn(6.dp, w - 6.dp)
                         Text("◆", color = Color.White, fontSize = 8.sp, modifier = Modifier.offset(x = x, y = 3.dp))
                     }
+                }
+            }
+        }
+        if (main) {
+            // ⋈ button on each junction between two adjacent main-track clips.
+            clips.sortedBy { it.timelineStartMs }.zipWithNext().forEach { (a, b) ->
+                val aEnd = a.timelineStartMs + (a.end(durationMs) - a.startMs).coerceAtLeast(250L)
+                if (b.timelineStartMs - aEnd in -250L..250L) {
+                    val has = transitions.any { it.fromClipId == a.id && it.toClipId == b.id && it.type != TransitionType.CUT }
+                    Box(
+                        Modifier.align(Alignment.CenterStart).offset(x = scale.msToDp(aEnd) - 14.dp).size(28.dp)
+                            .clip(RoundedCornerShape(8.dp)).background(if (has) MfColors.Violet else Color.White)
+                            .pressable { onTransition(a.id, b.id) },
+                        contentAlignment = Alignment.Center,
+                    ) { Text("⋈", color = if (has) Color.White else Color.Black, fontSize = 16.sp) }
                 }
             }
         }

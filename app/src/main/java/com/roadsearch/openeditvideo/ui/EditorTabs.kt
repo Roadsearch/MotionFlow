@@ -52,6 +52,7 @@ internal class TabActions(
     val clipVolume: () -> Unit,
     val musicVolume: () -> Unit,
     val openDrawer: (Drawer) -> Unit,
+    val openTransition: (Long, Long) -> Unit,
 )
 
 @Composable
