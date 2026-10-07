@@ -18,6 +18,7 @@ data class VideoClip(
     val keyframes: List<Keyframe> = emptyList(),
     val animation: TransformAnimation = TransformAnimation(),
     val effects: EffectSettings = EffectSettings(),
+    val parentId: Long? = null,
 )
 
 @Serializable
@@ -141,6 +142,7 @@ data class EditorUiState(
     val markers: List<Marker> = emptyList(),
     val snappingEnabled: Boolean = true,
     val trackStates: Map<Int, TrackState> = emptyMap(),
+    val nullObjects: List<NullObject> = emptyList(),
 )
 
 @Serializable

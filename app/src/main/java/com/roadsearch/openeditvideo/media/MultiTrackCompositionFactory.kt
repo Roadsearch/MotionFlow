@@ -86,7 +86,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
         val (canvasW, canvasH) = settings.canvasSize(state.aspect)
         val outputSize = Size(canvasW, canvasH)
         val builder = Composition.Builder(videoSequences + audioSequences)
-            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans, outputSize))
+            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans, outputSize, state.nullObjects))
         // Frame rate is a ceiling: frames are dropped to reach 24/30 fps; 60 keeps the source rate.
         if (settings.fps < 60) {
             builder.setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(androidx.media3.effect.FrameDropEffect.createDefaultFrameDropEffect(settings.fps.toFloat()))))
@@ -212,6 +212,7 @@ private sealed interface VideoInputPlan {
 private class TimelineVideoCompositorSettings(
     private val plans: List<VideoInputPlan>,
     private val outputSize: Size,
+    private val nullObjects: List<com.roadsearch.openeditvideo.model.NullObject> = emptyList(),
 ) : androidx.media3.common.VideoCompositorSettings {
     override fun getOutputSize(inputSizes: List<Size>): Size = outputSize
 
@@ -224,7 +225,7 @@ private class TimelineVideoCompositorSettings(
                 val clip = plan.clip
                 val active = globalMs >= clip.timelineStartMs && globalMs < clip.timelineStartMs + plan.durationMs
                 if (!active) return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
-                val keyframe = clip.keyframesAt(globalMs)
+                val keyframe = com.roadsearch.openeditvideo.scene.SceneGraph.resolve(clip.keyframesAt(globalMs), clip.parentId, nullObjects, globalMs)
                 val x = (keyframe.x / (MultiTrackCompositionFactory.DEFAULT_WIDTH / 2f)).coerceIn(-1f, 1f)
                 val y = (-keyframe.y / (MultiTrackCompositionFactory.DEFAULT_HEIGHT / 2f)).coerceIn(-1f, 1f)
                 val scale = keyframe.scale.coerceIn(0.01f, 20f)
