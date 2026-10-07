@@ -30,11 +30,16 @@ object ExportCapabilityAnalyzer {
                 if (animated || staticMoved) add("Le blend ${mode.name} du clip $id nécessite encore un blend programmable positionné; le backend avancé actuel ne sait fusionner que le plein cadre.")
             }
         }
-        state.transitions
-            .filter { it.type != TransitionType.CUT }
-            .takeIf { it.isNotEmpty() }
-            ?.let {
-                add("Transitions non-CUT : le crossfade/transition à deux entrées doit encore passer par le compositeur programmable; l'export Media3 public ne les honore pas encore de manière générale.")
-            }
+        // Cross-fade and fade-through are rendered by the Media3 path through opacity ramps
+        // (see TransitionRenderPlan / AdvancedRenderPlanner); this gate must stay aligned with that planner.
+        val active = state.transitions.filter { it.type != TransitionType.CUT }
+        val wipes = active.filter { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }
+        if (wipes.isNotEmpty()) {
+            add("Les transitions de type volet (wipe) ne sont pas encore rendues à l'export : remplacez-les par un fondu ou une coupe.")
+        }
+        val fades = active.filter { it.type == TransitionType.CROSS_FADE || it.type == TransitionType.FADE_THROUGH }
+        if (fades.isNotEmpty() && state.blendModes.any { it.value != BlendMode.NORMAL }) {
+            add("Les fondus enchaînés ne sont pas encore combinables avec un mode de fusion avancé.")
+        }
     }
 }
