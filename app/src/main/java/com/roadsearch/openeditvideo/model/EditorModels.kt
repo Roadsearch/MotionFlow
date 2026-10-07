@@ -141,6 +141,8 @@ data class EditorUiState(
     val markers: List<Marker> = emptyList(),
     val snappingEnabled: Boolean = true,
     val trackStates: Map<Int, TrackState> = emptyMap(),
+    /** Set when the stored project could not be decoded. Never persisted; while set, saving is disabled so the original data is not overwritten. */
+    val loadError: String? = null,
 )
 
 @Serializable
