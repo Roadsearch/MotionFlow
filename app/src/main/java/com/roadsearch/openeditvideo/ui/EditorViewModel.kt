@@ -21,6 +21,7 @@ import com.roadsearch.openeditvideo.export.VideoExportWorker
 import com.roadsearch.openeditvideo.media.MediaProbe
 import com.roadsearch.openeditvideo.media.MediaEngine
 import com.roadsearch.openeditvideo.model.*
+import com.roadsearch.openeditvideo.scene.SceneGraph
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +73,7 @@ class EditorViewModel @Inject constructor(
         val markers: List<Marker>,
         val trackStates: Map<Int, TrackState>,
         val snappingEnabled: Boolean,
+        val nullObjects: List<NullObject>,
     )
 
     private val undoStack = ArrayDeque<Snapshot>()
@@ -148,6 +150,7 @@ class EditorViewModel @Inject constructor(
         markers = s.markers,
         trackStates = s.trackStates,
         snappingEnabled = s.snappingEnabled,
+        nullObjects = s.nullObjects,
     )
 
     private fun record() {
@@ -175,6 +178,7 @@ class EditorViewModel @Inject constructor(
                 markers = s.markers,
                 trackStates = s.trackStates,
                 snappingEnabled = s.snappingEnabled,
+                nullObjects = s.nullObjects,
             )
         }
     }
@@ -848,6 +852,80 @@ class EditorViewModel @Inject constructor(
             it.copy(clips = it.clips.map { item ->
                 if (item.id == clip.id) item.copy(animation = TransformAnimation(), keyframes = emptyList()) else item
             })
+        }
+    }
+
+    /** Creates a Null controller and attaches the selected video clip to it. */
+    fun createNullParentForSelectedClip(): Long? {
+        val state = _state.value
+        val clipId = state.selectedClipId ?: return null
+        if (state.clips.none { it.id == clipId } || SceneGraph.validationErrors(state.clips, state.nullObjects).isNotEmpty()) return null
+        val usedIds = state.nullObjects.mapTo(HashSet<Long>()) { it.id }
+        var id = System.nanoTime().coerceAtLeast(1L)
+        while (id in usedIds) id = if (id == Long.MAX_VALUE) 1L else id + 1L
+        val node = NullObject(id, "Null ${state.nullObjects.size + 1}")
+        record()
+        _state.update { current ->
+            current.copy(
+                nullObjects = current.nullObjects + node,
+                clips = current.clips.map { if (it.id == clipId) it.copy(parentId = id) else it },
+            )
+        }
+        return id
+    }
+
+    /** Reparents the selected clip to a valid Null controller, or detaches it when [parentId] is null. */
+    fun setSelectedClipParent(parentId: Long?): Boolean {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return false
+        if (!SceneGraph.canParentClip(parentId, state.nullObjects)) return false
+        if (clip.parentId == parentId) return true
+        record()
+        _state.update { current ->
+            current.copy(clips = current.clips.map { if (it.id == clip.id) it.copy(parentId = parentId) else it })
+        }
+        return true
+    }
+
+    fun setNullParent(id: Long, parentId: Long?): Boolean {
+        val state = _state.value
+        val node = state.nullObjects.firstOrNull { it.id == id } ?: return false
+        if (!SceneGraph.canParentNull(id, parentId, state.nullObjects)) return false
+        if (node.parentId == parentId) return true
+        record()
+        _state.update { current ->
+            current.copy(nullObjects = current.nullObjects.map { if (it.id == id) it.copy(parentId = parentId) else it })
+        }
+        return true
+    }
+
+    /** Adds/updates a timeline-time transform keyframe on a Null controller. */
+    fun setNullKeyframeProperty(
+        id: Long,
+        x: Float? = null,
+        y: Float? = null,
+        scale: Float? = null,
+        rotation: Float? = null,
+        opacity: Float? = null,
+    ) {
+        val state = _state.value
+        val node = state.nullObjects.firstOrNull { it.id == id } ?: return
+        val time = state.positionMs.coerceAtLeast(0L)
+        val current = node.animation.at(time)
+        record()
+
+        fun put(list: List<AnimatedKeyframe>, value: Float, easing: Easing): List<AnimatedKeyframe> =
+            (list.filterNot { it.timeMs == time } + AnimatedKeyframe(time, value, easing)).sortedBy { it.timeMs }
+
+        val animation = node.animation.copy(
+            x = put(node.animation.x, x ?: current.x, state.easing),
+            y = put(node.animation.y, y ?: current.y, state.easing),
+            scale = put(node.animation.scale, scale ?: current.scale, state.easing),
+            rotation = put(node.animation.rotation, rotation ?: current.rotation, state.easing),
+            opacity = put(node.animation.opacity, opacity ?: current.opacity, state.easing),
+        )
+        _state.update { currentState ->
+            currentState.copy(nullObjects = currentState.nullObjects.map { if (it.id == id) it.copy(animation = animation) else it })
         }
     }
 
