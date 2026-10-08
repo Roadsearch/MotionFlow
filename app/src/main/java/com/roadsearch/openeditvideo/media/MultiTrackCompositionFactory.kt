@@ -27,6 +27,7 @@ import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextOverlay as TextOverlayModel
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.model.at
 
 /** Builds an absolute-time Media3 composition from the editable NLE timeline. */
 @UnstableApi
@@ -241,10 +242,19 @@ private class TimelineVideoCompositorSettings(
                 if (globalMs !in plan.overlay.startMs until plan.overlay.endMs) {
                     StaticOverlaySettings.Builder().setAlphaScale(0f).build()
                 } else {
+                    val transform = com.roadsearch.openeditvideo.scene.SceneGraph.resolve(
+                        plan.overlay.animation.at(globalMs), plan.overlay.parentId, nullObjects, globalMs,
+                    )
+                    val x = (transform.x / (MultiTrackCompositionFactory.DEFAULT_WIDTH / 2f)).coerceIn(-1f, 1f)
+                    val y = (-transform.y / (MultiTrackCompositionFactory.DEFAULT_HEIGHT / 2f)).coerceIn(-1f, 1f)
+                    val posY = (plan.overlay.style.posY + y).coerceIn(-1f, 1f)
+                    val scale = transform.scale.coerceIn(0.01f, 20f)
                     StaticOverlaySettings.Builder()
-                        .setBackgroundFrameAnchor(0f, 0f)
+                        .setBackgroundFrameAnchor(x, posY)
                         .setOverlayFrameAnchor(0f, 0f)
-                        .setAlphaScale(1f)
+                        .setScale(scale, scale)
+                        .setRotationDegrees(transform.rotation)
+                        .setAlphaScale(transform.opacity.coerceIn(0f, 1f))
                         .build()
                 }
             }
