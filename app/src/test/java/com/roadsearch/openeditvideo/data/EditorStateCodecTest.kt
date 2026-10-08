@@ -27,7 +27,10 @@ class EditorStateCodecTest {
             aspect = AspectRatio.LANDSCAPE,
             coverMs = 1234L,
             audioClips = listOf(AudioClip(12, android.net.Uri.parse("content://audio/12"), "Audio", startMs = 1_000L, endMs = 6_000L, sourceDurationMs = 30_000L)),
-            textOverlays = listOf(TextOverlay(1, "Salut", 100, 900, TextStyleSpec(TextPreset.NEON, "bebas", 0xFFFF4FD8.toInt(), 80f, .4f))),
+            textOverlays = listOf(TextOverlay(
+                1, "Salut", 100, 900, TextStyleSpec(TextPreset.NEON, "bebas", 0xFFFF4FD8.toInt(), 80f, .4f),
+                parentId = 5, animation = TransformAnimation(key(30f), key(-20f), key(1.2f), key(15f), key(.75f)),
+            )),
             transitions = listOf(Transition(7, 1, 2, 600, TransitionType.CROSS_FADE)),
             nullObjects = listOf(
                 NullObject(5, "Master", null, TransformAnimation(key(10f), key(20f), key(1.5f), key(30f), key(.8f))),
