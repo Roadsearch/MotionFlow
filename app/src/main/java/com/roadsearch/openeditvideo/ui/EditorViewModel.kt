@@ -567,22 +567,33 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun addText(text: String, style: TextStyleSpec) {
+    fun addText(text: String, style: TextStyleSpec, parentId: Long? = null) {
         if (text.isBlank()) return
         record()
         val id = System.nanoTime()
         _state.update { s ->
             s.copy(
-                textOverlays = s.textOverlays + TextOverlay(id, text.trim(), s.positionMs, s.positionMs + 3_000L, style),
+                textOverlays = s.textOverlays + TextOverlay(id, text.trim(), s.positionMs, s.positionMs + 3_000L, style, parentId),
                 selectedTextId = id, selectedAudioId = null, selectedClipId = null, selectedClipIds = emptySet(),
             )
         }
     }
 
-    fun updateText(id: Long, text: String, style: TextStyleSpec) {
+    fun updateText(id: Long, text: String, style: TextStyleSpec, parentId: Long? = _state.value.textOverlays.firstOrNull { it.id == id }?.parentId) {
         if (text.isBlank() || _state.value.textOverlays.none { it.id == id }) return
+        if (!SceneGraph.canParentClip(parentId, _state.value.nullObjects)) return
         record()
-        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(text = text.trim(), style = style) else it }) }
+        _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(text = text.trim(), style = style, parentId = parentId) else it }) }
+    }
+
+    fun setTextParent(id: Long, parentId: Long?): Boolean {
+        val state = _state.value
+        val overlay = state.textOverlays.firstOrNull { it.id == id } ?: return false
+        if (!SceneGraph.canParentClip(parentId, state.nullObjects)) return false
+        if (overlay.parentId == parentId) return true
+        record()
+        _state.update { current -> current.copy(textOverlays = current.textOverlays.map { if (it.id == id) it.copy(parentId = parentId) else it }) }
+        return true
     }
 
     fun clearSelection() = _state.update {
