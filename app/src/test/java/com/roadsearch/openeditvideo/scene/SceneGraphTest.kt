@@ -5,6 +5,7 @@ import com.roadsearch.openeditvideo.model.Easing
 import com.roadsearch.openeditvideo.model.Keyframe
 import com.roadsearch.openeditvideo.model.NullObject
 import com.roadsearch.openeditvideo.model.TransformAnimation
+import com.roadsearch.openeditvideo.model.TextOverlay
 import com.roadsearch.openeditvideo.model.VideoClip
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,6 +68,11 @@ class SceneGraphTest {
     @Test fun `graph validation reports missing clip parents`() {
         val clip = VideoClip(7, android.net.Uri.parse("content://clip/7"), "child", parentId = 99)
         assertTrue(SceneGraph.validationErrors(listOf(clip), listOf(node(1))).any { it.contains("parent 99") })
+    }
+
+    @Test fun `graph validation reports missing text parents`() {
+        val text = TextOverlay(8, "child", 0, 100, parentId = 99)
+        assertTrue(SceneGraph.validationErrors(emptyList(), listOf(node(1)), listOf(text)).any { it.contains("parent 99") })
     }
 
     @Test fun `graph validation reports cyclic null controllers`() {
