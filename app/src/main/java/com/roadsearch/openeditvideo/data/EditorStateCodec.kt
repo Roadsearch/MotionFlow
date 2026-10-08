@@ -9,8 +9,8 @@ import org.json.JSONObject
  * Keeping the schema in a codec makes future migrations independent from the UI state class.
  */
 object EditorStateCodec {
-    /** 5: aspect, coverMs, text style, mask invert, nullObjects + clip parent (all additive, older files still load). */
-    private const val VERSION = 5
+    /** 6: preserves audio source duration; all fields added in previous versions remain backward compatible. */
+    private const val VERSION = 6
 
     fun encode(state: EditorUiState): String = JSONObject().apply {
         put("version", VERSION)
@@ -149,7 +149,8 @@ object EditorStateCodec {
 
     private fun audio(a: AudioClip) = JSONObject().apply {
         put("id", a.id); put("uri", a.uri.toString()); put("name", a.name)
-        put("start", a.startMs); put("end", a.endMs); put("volume", a.volume.toDouble()); put("timelineStart", a.timelineStartMs)
+        put("start", a.startMs); put("end", a.endMs); put("sourceDuration", a.sourceDurationMs)
+        put("volume", a.volume.toDouble()); put("timelineStart", a.timelineStartMs)
     }
 
     private fun readAudio(o: JSONObject) = AudioClip(
