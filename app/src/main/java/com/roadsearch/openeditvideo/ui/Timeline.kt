@@ -1,204 +1,263 @@
 package com.roadsearch.openeditvideo.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.roadsearch.openeditvideo.model.*
-import kotlin.math.max
-import kotlin.math.sin
+import androidx.compose.ui.unit.sp
+import com.roadsearch.openeditvideo.model.EditorUiState
+import com.roadsearch.openeditvideo.model.TrackState
+import com.roadsearch.openeditvideo.model.timelineEndMs
+import com.roadsearch.openeditvideo.ui.components.pressable
+import com.roadsearch.openeditvideo.ui.theme.MfColors
+import com.roadsearch.openeditvideo.ui.timeline.AudioLane
+import com.roadsearch.openeditvideo.ui.timeline.ClipCapsules
+import com.roadsearch.openeditvideo.ui.timeline.CoverTile
+import com.roadsearch.openeditvideo.ui.timeline.LayersPopover
+import com.roadsearch.openeditvideo.ui.timeline.LaneHeights
+import com.roadsearch.openeditvideo.ui.timeline.MarkerLane
+import com.roadsearch.openeditvideo.ui.timeline.TextLane
+import com.roadsearch.openeditvideo.ui.timeline.TimelineRuler
+import com.roadsearch.openeditvideo.ui.timeline.TimelineScale
+import com.roadsearch.openeditvideo.ui.timeline.VideoLane
+import kotlinx.coroutines.flow.drop
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
-private val TPanel = Color(0xFF101219); private val TCard = Color(0xFF181B24); private val TAccent = Color(0xFF8B7CFF); private val TMuted = Color(0xFF8C92A3)
-private val TMarker = Color(0xFFFFB74D); private val TLocked = Color(0xFFE57373)
+private val MarkerTint = Color(0xFFFFB74D)
 
-@Composable fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel) {
-    val px = 42f * state.zoom
-    val duration = max(state.durationMs, state.clips.maxOfOrNull { it.timelineStartMs + (it.end(state.durationMs) - it.startMs).coerceAtLeast(1L) } ?: 0L).coerceAtLeast(1000L)
-    val scroll = rememberScrollState(); val contentWidth = (duration / 1000f * px + 240f).dp
-    Column(Modifier.fillMaxWidth().background(TPanel)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Timeline", color = Color.White, modifier = Modifier.weight(1f))
-            Text(
-                text = if (state.snappingEnabled) "Aimant ✓" else "Aimant",
-                color = if (state.snappingEnabled) TAccent else TMuted,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { vm.toggleSnapping() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-            Spacer(Modifier.width(4.dp))
-            Box(
-                Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .clickable { vm.addMarkerAtPlayhead() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.Flag, contentDescription = "Ajouter un marqueur", tint = TMarker, modifier = Modifier.size(17.dp)) }
-            Spacer(Modifier.width(6.dp))
-            Text("${"%.1f".format(state.zoom)}×", color = TMuted)
-        }
-        Box(Modifier.fillMaxWidth().height(28.dp).horizontalScroll(scroll)) { TimeRuler(duration, px, contentWidth) }
-        if (state.markers.isNotEmpty()) {
-            Box(Modifier.fillMaxWidth().height(20.dp).horizontalScroll(scroll)) { MarkerLane(state, vm, px, contentWidth) }
-        }
-        val tracks = state.clips.groupBy { it.track }.toSortedMap()
-        if (tracks.isEmpty()) TimelineTrack(0, "V1", emptyList(), state, vm, px, contentWidth, scroll)
-        else tracks.forEach { (track, clips) ->
-            if (state.trackStates[track]?.hidden != true) {
-                TimelineTrack(track, "V${track + 1}", clips, state, vm, px, contentWidth, scroll)
-            }
-        }
-        AudioTrack(state, px, contentWidth, scroll)
-        TextTrack(state, px, contentWidth, scroll)
-        Spacer(Modifier.height(8.dp))
-    }
-}
+/** Entry points shown inside the timeline itself (leading buttons, empty "ghost" tracks). */
+internal class TimelineActions(
+    val onImport: () -> Unit,
+    val onAddMusic: () -> Unit,
+    val onAddText: () -> Unit,
+    val onCover: () -> Unit,
+    val onTransition: (Long, Long) -> Unit,
+)
 
-@Composable private fun TimeRuler(duration: Long, px: Float, width: androidx.compose.ui.unit.Dp) { Row(Modifier.width(width).fillMaxHeight()) { repeat((duration / 1000 + 2).toInt()) { s -> Box(Modifier.width(px.dp).fillMaxHeight()) { Text(if (s % 5 == 0) "${s}s" else "·", color = TMuted) } } } }
+/**
+ * Multi-track timeline with a FIXED playhead at the centre: the tracks scroll underneath it.
+ * Scroll offset <-> playhead time are kept in sync both ways, with half a viewport of margin on each side so time 0
+ * and the end can reach the centre. The leading margin hosts the "+" and mute buttons (they scroll with the content).
+ */
+@Composable
+internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, actions: TimelineActions) {
+    val scale = remember(state.zoom) { TimelineScale(42f * state.zoom) }
+    val duration = remember(state.clips, state.audioClips, state.textOverlays) { maxOf(state.timelineEndMs(), 5_000L) }
+    val density = LocalDensity.current
+    val dens = density.density
+    val scroll = rememberScrollState()
+    var viewportPx by remember { mutableIntStateOf(0) }
+    var expected by remember { mutableIntStateOf(-1) }
+    val latest by rememberUpdatedState(state)
 
-@Composable private fun MarkerLane(state: EditorUiState, vm: EditorViewModel, px: Float, width: androidx.compose.ui.unit.Dp) {
-    Box(Modifier.width(width).fillMaxHeight()) {
-        state.markers.forEach { marker ->
-            Box(
-                Modifier
-                    .offset(x = (marker.positionMs / 1000f * px).dp, y = 2.dp)
-                    .size(16.dp)
-                    .pointerInput(marker.id) {
-                        detectTapGestures(
-                            onTap = { vm.seekTo(marker.positionMs) },
-                            onLongPress = { vm.removeMarker(marker.id) },
-                        )
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Rounded.Flag, contentDescription = marker.label.ifBlank { "Marqueur" }, tint = TMarker, modifier = Modifier.size(13.dp))
+    val lead = with(density) { (viewportPx / 2).toDp() }
+    val trackWidth = scale.msToDp(duration)
+    val laneWidth = trackWidth + lead
+    val totalWidth = lead + laneWidth
+
+    fun msToPx(ms: Long): Int = (ms / 1000f * scale.dpPerSecond * dens).roundToInt()
+    fun pxToMs(px: Int): Long = (px / (scale.dpPerSecond * dens) * 1000f).toLong().coerceIn(0L, duration)
+
+    // Playhead time -> scroll offset (playback, taps, selection, zoom).
+    LaunchedEffect(state.positionMs, scale, viewportPx, scroll.maxValue) {
+        if (viewportPx > 0 && scroll.maxValue > 0 && !scroll.isScrollInProgress) {
+            val target = msToPx(state.positionMs).coerceIn(0, scroll.maxValue)
+            if (abs(scroll.value - target) > 1) {
+                expected = target
+                scroll.scrollTo(target)
             }
         }
     }
-}
+    // Scroll offset -> playhead time (finger drag and fling). Our own scrollTo calls are filtered by `expected`.
+    LaunchedEffect(scale, duration, viewportPx) {
+        snapshotFlow { scroll.value }.drop(1).collect { v ->
+            if (viewportPx == 0 || scroll.maxValue == 0 || abs(v - expected) <= 1) return@collect
+            if (latest.playing) vm.setPlaying(false)
+            val ms = pxToMs(v).coerceAtMost(latest.timelineEndMs())
+            if (ms != latest.positionMs) vm.setPosition(ms)
+        }
+    }
 
-@Composable private fun TrackHeader(track: Int, label: String, state: EditorUiState, vm: EditorViewModel) {
-    val ts = state.trackStates[track] ?: TrackState()
-    Column(Modifier.width(38.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = TMuted)
-        Row {
-            Box(Modifier.size(22.dp).clickable { vm.toggleTrackLock(track) }, contentAlignment = Alignment.Center) {
-                Icon(
-                    if (ts.locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                    contentDescription = if (ts.locked) "Déverrouiller la piste" else "Verrouiller la piste",
-                    tint = if (ts.locked) TLocked else TMuted.copy(.55f),
-                    modifier = Modifier.size(12.dp),
-                )
+    val trackIds = remember(state.clips) { state.clips.map { it.track }.distinct().sorted().ifEmpty { listOf(0) } }
+    val selectedIds = remember(state.selectedClipId, state.selectedClipIds) { state.selectedClipIds + listOfNotNull(state.selectedClipId) }
+    val selectedClip = state.clips.firstOrNull { it.id == state.selectedClipId }
+    var showLayers by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedClip == null) { if (selectedClip == null) showLayers = false }
+
+    Column(Modifier.fillMaxWidth().background(MfColors.Surface)) {
+        TimelineToolbar(
+            snapping = state.snappingEnabled, zoom = state.zoom,
+            timeLabel = "${formatTime(state.positionMs)}.${(state.positionMs % 1000) / 100} / ${formatTime(state.timelineEndMs())}",
+            onSnap = vm::toggleSnapping, onMarker = { vm.addMarkerAtPlayhead() },
+            onToStart = { vm.setPosition(0L) }, onToEnd = { vm.setPosition(state.timelineEndMs()) },
+            onZoomOut = { vm.setZoom(state.zoom - .25f) }, onZoomIn = { vm.setZoom(state.zoom + .25f) },
+        )
+        Box(Modifier.fillMaxWidth().onSizeChanged { viewportPx = it.width }) {
+            Box(Modifier.fillMaxWidth().horizontalScroll(scroll)) {
+                Column(Modifier.width(totalWidth)) {
+                    LaneRow(lead, LaneHeights.Ruler) { TimelineRuler(duration, scale, laneWidth) }
+                    if (state.markers.isNotEmpty()) {
+                        LaneRow(lead, LaneHeights.Markers) {
+                            MarkerLane(state.markers, scale, laneWidth, onSeek = { vm.seekTo(it) }, onRemove = { vm.removeMarker(it) })
+                        }
+                    }
+                    trackIds.forEachIndexed { i, track ->
+                        val height = if (i == 0) LaneHeights.Main else LaneHeights.Overlay
+                        LaneRow(
+                            lead, height,
+                            leading = {
+                                if (i == 0) {
+                                    Row(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        AddButton(actions.onImport)
+                                        LeadButton(
+                                            if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
+                                            if (state.muted) "Muet" else "Son", vm::toggleMute,
+                                        )
+                                        CoverTile(state, actions.onCover)
+                                    }
+                                }
+                            },
+                        ) {
+                            VideoLane(
+                                clips = remember(state.clips, track) { state.clips.filter { it.track == track } },
+                                trackState = state.trackStates[track] ?: TrackState(),
+                                selectedIds = selectedIds, durationMs = state.durationMs, main = i == 0,
+                                scale = scale, width = laneWidth, height = height,
+                                vm = vm, onSeek = { vm.seekTo(it) },
+                                transitions = state.transitions, onTransition = actions.onTransition,
+                            )
+                        }
+                    }
+                    LaneRow(lead, LaneHeights.Text) {
+                        TextLane(state.textOverlays, state.selectedTextId, scale, laneWidth, LaneHeights.Text, vm, onSeek = { vm.seekTo(it) }, onAdd = actions.onAddText)
+                    }
+                    LaneRow(lead, LaneHeights.Audio) {
+                        AudioLane(state.audioClips, state.selectedAudioId, scale, laneWidth, LaneHeights.Audio, vm, onSeek = { vm.seekTo(it) }, onAdd = actions.onAddMusic)
+                    }
+                }
             }
-            Box(Modifier.size(22.dp).clickable { vm.toggleTrackMute(track) }, contentAlignment = Alignment.Center) {
-                Icon(
-                    if (ts.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                    contentDescription = if (ts.muted) "Réactiver le son de la piste" else "Couper le son de la piste",
-                    tint = if (ts.muted) TLocked else TMuted.copy(.55f),
-                    modifier = Modifier.size(12.dp),
-                )
+            if (showLayers && selectedClip != null) LayersPopover(state, vm) { showLayers = false }
+            // Fixed playhead.
+            Canvas(Modifier.matchParentSize()) {
+                val x = size.width / 2f
+                drawLine(Color.White, Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx())
+                drawCircle(Color.White, 6.dp.toPx(), Offset(x, 7.dp.toPx()))
+                drawCircle(MfColors.Violet, 3.dp.toPx(), Offset(x, 7.dp.toPx()))
             }
         }
-        Box(Modifier.size(22.dp).clickable { vm.toggleTrackVisibility(track) }, contentAlignment = Alignment.Center) {
-            Icon(
-                if (ts.hidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                contentDescription = if (ts.hidden) "Afficher la piste" else "Masquer la piste",
-                tint = TMuted.copy(.55f),
-                modifier = Modifier.size(12.dp),
-            )
-        }
+        ClipCapsules(state, selectedClip, vm) { showLayers = !showLayers }
+        Spacer(Modifier.height(6.dp))
     }
 }
 
-@Composable private fun TimelineTrack(track: Int, label: String, clips: List<VideoClip>, state: EditorUiState, vm: EditorViewModel, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) {
-    val ts = state.trackStates[track] ?: TrackState()
-    Row(Modifier.fillMaxWidth().height(82.dp)) {
-        TrackHeader(track, label, state, vm)
-        Box(Modifier.weight(1f).height(82.dp).horizontalScroll(scroll).alpha(if (ts.locked) .55f else 1f)) {
-            Box(Modifier.width(width).fillMaxHeight().pointerInput(state.zoom, state.durationMs, ts.locked) { if (!ts.locked) detectTapGestures { p -> vm.seekTo((p.x / px * 1000f).toLong().coerceAtLeast(0L)) } }) {
-                clips.sortedBy { it.timelineStartMs }.forEach { clip -> TimelineClip(clip, state, vm, px, ts) }
-                val x = (state.positionMs / 1000f * px).dp; Box(Modifier.offset(x = x).width(2.dp).fillMaxHeight().background(Color.White.copy(.9f)))
-            }
-        }
+/** One timeline row: [leading margin | lane]. The margin is part of the row so its buttons stay tappable. */
+@Composable
+private fun LaneRow(lead: Dp, height: Dp, leading: @Composable BoxScope.() -> Unit = {}, content: @Composable () -> Unit) {
+    Row(Modifier.height(height)) {
+        Box(Modifier.width(lead).fillMaxHeight(), content = leading)
+        content()
     }
 }
 
-@Composable private fun TimelineClip(clip: VideoClip, state: EditorUiState, vm: EditorViewModel, px: Float, ts: TrackState) {
-    val d = (clip.end(state.durationMs) - clip.startMs).coerceAtLeast(250L); val width = (d / 1000f * px).coerceAtLeast(90f); val x = (clip.timelineStartMs / 1000f * px).dp; val selected = clip.id == state.selectedClipId || clip.id in state.selectedClipIds
-    Box(Modifier.offset(x = x).width(width.dp).height(62.dp).clip(RoundedCornerShape(9.dp)).background(if (selected) TAccent.copy(.38f) else TCard).alpha(if (ts.muted) .7f else 1f)) {
-        ThumbnailStrip(clip.uri, clip.startMs, clip.end(state.durationMs), max(2, (width / 52f).toInt()), Modifier.fillMaxSize())
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            if (!ts.locked) Handle(onStart = { vm.select(clip.id); vm.beginEditGesture() }, onEnd = { vm.commitEditGesture() }, onCancel = { vm.cancelEditGesture() }) { delta -> vm.trimLeft(clip.id, (delta / px * 1000f).toLong()) }
-            Box(Modifier.weight(1f).fillMaxHeight().background(if (selected) TAccent.copy(.18f) else Color.Transparent).pointerInput(clip.id, px, ts.locked) {
-                if (!ts.locked) detectDragGestures(
-                    onDragStart = { vm.select(clip.id); vm.beginEditGesture() },
-                    onDragEnd = { vm.commitEditGesture() },
-                    onDragCancel = { vm.cancelEditGesture() },
-                ) { _, drag -> vm.moveClip(clip.id, (drag.x / px * 1000f).toLong()) }
-                else detectTapGestures { vm.select(clip.id) }
-            }) { Column(Modifier.padding(horizontal = 7.dp)) { Text(clip.name, color = Color.White, maxLines = 1); Text("${d / 1000}s", color = TMuted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) } }
-            if (!ts.locked) Handle(onStart = { vm.select(clip.id); vm.beginEditGesture() }, onEnd = { vm.commitEditGesture() }, onCancel = { vm.cancelEditGesture() }) { delta -> vm.trimRight(clip.id, (delta / px * 1000f).toLong()) }
-        }
-        if (clip.keyframes.isNotEmpty()) {
-            clip.keyframes.forEach { k ->
-                val local = (k.timeMs - clip.startMs).coerceAtLeast(0L)
-                val markerX = (local / 1000f * px).coerceIn(6f, width - 6f)
-                Text("◆", color = Color.White, modifier = Modifier.offset(x = markerX.dp, y = 4.dp))
-            }
-        }
+@Composable
+private fun AddButton(onClick: () -> Unit) {
+    Box(
+        Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(Icons.Rounded.Add, "Importer un média", tint = Color.Black, modifier = Modifier.size(26.dp)) }
+}
+
+@Composable
+private fun LeadButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Column(Modifier.pressable(role = null, onClick = onClick).padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = MfColors.TextSecondary, modifier = Modifier.size(20.dp))
+        Text(label, color = MfColors.TextSecondary, fontSize = 10.sp)
     }
 }
 
-@Composable private fun AudioTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(48.dp)) { Text("A1", color = TMuted, modifier = Modifier.width(38.dp).padding(start = 8.dp, top = 15.dp)); Box(Modifier.weight(1f).height(42.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(42.dp)) { state.audioClips.sortedBy { it.timelineStartMs }.forEach { a -> Box(Modifier.offset(x = (a.timelineStartMs / 1000f * px).dp).width(((((if (a.endMs > a.startMs) a.endMs - a.startMs else 3000L) / 1000f * px).coerceAtLeast(70f)).dp)).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF245B68))) { WaveformStrip(a.id) } } } } } }
-
-/** Symmetric pseudo-waveform, deterministic per clip so it stays stable across recompositions. */
-@Composable private fun WaveformStrip(seed: Long = 0L) {
-    Row(Modifier.fillMaxSize().padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(28) { i ->
-            val t = i / 27f
-            val envelope = sin(t * Math.PI).toFloat()
-            val wobble = (sin(i * 1.7 + seed % 31) * .5 + .5).toFloat()
-            val h = (4 + 30 * envelope * (0.35f + 0.65f * wobble)).dp
-            Box(Modifier.width(3.dp).height(h).clip(RoundedCornerShape(2.dp)).background(Color(0xFF76D5D7)))
-            Spacer(Modifier.width(3.dp))
-        }
-    }
-}
-
-@Composable private fun TextTrack(state: EditorUiState, px: Float, width: androidx.compose.ui.unit.Dp, scroll: androidx.compose.foundation.ScrollState) { Row(Modifier.fillMaxWidth().height(42.dp)) { Text("T1", color = TMuted, modifier = Modifier.width(38.dp).padding(start = 8.dp, top = 12.dp)); Box(Modifier.weight(1f).height(38.dp).horizontalScroll(scroll)) { Row(Modifier.width(width).height(38.dp)) { state.textOverlays.sortedBy { it.startMs }.forEach { t -> Box(Modifier.offset(x = (t.startMs / 1000f * px).dp).width((((t.endMs - t.startMs) / 1000f * px).coerceAtLeast(60f)).dp).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(Color(0xFF5A3D78)), contentAlignment = Alignment.Center) { Text(t.text, color = Color.White, maxLines = 1) } } } } } }
-
-@Composable private fun Handle(
-    onStart: () -> Unit,
-    onEnd: () -> Unit,
-    onCancel: () -> Unit,
-    onDrag: (Float) -> Unit,
+@Composable
+private fun TimelineToolbar(
+    snapping: Boolean, zoom: Float, timeLabel: String,
+    onSnap: () -> Unit, onMarker: () -> Unit, onToStart: () -> Unit, onToEnd: () -> Unit, onZoomOut: () -> Unit, onZoomIn: () -> Unit,
 ) {
-    Box(Modifier.width(16.dp).fillMaxHeight().pointerInput(Unit) {
-        detectDragGestures(
-            onDragStart = { onStart() },
-            onDragEnd = { onEnd() },
-            onDragCancel = { onCancel() },
-        ) { _, drag -> onDrag(drag.x) }
-    }, contentAlignment = Alignment.Center) {
-        Icon(Icons.Rounded.DragHandle, null, tint = Color.White.copy(.9f), modifier = Modifier.size(15.dp))
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        val chip = RoundedCornerShape(50)
+        Row(
+            Modifier
+                .clip(chip)
+                .background(if (snapping) MfColors.Active.copy(alpha = .16f) else MfColors.Card)
+                .border(1.dp, if (snapping) MfColors.Active else MfColors.Outline, chip)
+                .pressable(onClick = onSnap)
+                .padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(7.dp).clip(CircleShape).background(if (snapping) MfColors.Active else MfColors.TextMuted))
+            Spacer(Modifier.width(7.dp))
+            Text("Aimant", color = if (snapping) MfColors.Active else MfColors.TextSecondary, style = MaterialTheme.typography.labelMedium)
+        }
+        Spacer(Modifier.width(4.dp))
+        ToolbarIcon(Icons.Rounded.SkipPrevious, "Début", MfColors.TextSecondary, onToStart)
+        Text(
+            timeLabel, color = MfColors.TextSecondary, fontSize = 11.sp, maxLines = 1, textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        ToolbarIcon(Icons.Rounded.SkipNext, "Fin", MfColors.TextSecondary, onToEnd)
+        ToolbarIcon(Icons.Rounded.Remove, "Zoom arrière", MfColors.TextSecondary, onZoomOut)
+        ToolbarIcon(Icons.Rounded.Add, "Zoom avant", MfColors.TextSecondary, onZoomIn)
+    }
+}
+
+@Composable
+private fun ToolbarIcon(icon: ImageVector, description: String, tint: Color, onClick: () -> Unit) {
+    Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(icon, description, tint = tint, modifier = Modifier.size(18.dp))
     }
 }

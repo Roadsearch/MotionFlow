@@ -13,12 +13,17 @@ import com.roadsearch.openeditvideo.model.TransformAnimation
 import com.roadsearch.openeditvideo.model.AnimatedKeyframe
 import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.model.selectedClip
+import com.roadsearch.openeditvideo.model.at
 
 @Composable
 fun AnimationPanel(vm: EditorViewModel) {
     val state by vm.state.collectAsState()
     val clip = state.selectedClip() ?: return
     var easing by remember(clip.id, state.easing) { mutableStateOf(state.easing) }
+    var parentMenuExpanded by remember(clip.id) { mutableStateOf(false) }
+    var controllerParentMenuExpanded by remember(clip.id) { mutableStateOf(false) }
+    val parent = state.nullObjects.firstOrNull { it.id == clip.parentId }
+    val controllerParent = parent?.parentId?.let { id -> state.nullObjects.firstOrNull { it.id == id } }
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal=20.dp), horizontalArrangement=Arrangement.SpaceBetween) {
             Text("Animation", style=MaterialTheme.typography.titleLarge, color=MaterialTheme.colorScheme.onSurface)
@@ -42,6 +47,66 @@ fun AnimationPanel(vm: EditorViewModel) {
         TransformSlider("Échelle", clip.keyframesAt(state.positionMs).scale, .1f..4f) { vm.setKeyframeProperty(scale=it) }
         TransformSlider("Rotation", clip.keyframesAt(state.positionMs).rotation, -360f..360f) { vm.setKeyframeProperty(rotation=it) }
         TransformSlider("Opacité", clip.keyframesAt(state.positionMs).opacity, 0f..1f) { vm.setKeyframeProperty(opacity=it) }
+
+        HorizontalDivider(Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+        Text("Parentage", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 20.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(onClick = { parentMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(parent?.name ?: "Aucun parent", maxLines = 1)
+                }
+                DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Aucun parent") },
+                        onClick = { vm.setSelectedClipParent(null); parentMenuExpanded = false },
+                    )
+                    state.nullObjects.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item.name) },
+                            onClick = { vm.setSelectedClipParent(item.id); parentMenuExpanded = false },
+                        )
+                    }
+                }
+            }
+            Button(onClick = { vm.createNullParentForSelectedClip() }) { Text("Créer Null") }
+        }
+        if (parent != null) {
+            val transform = parent.animation.at(state.positionMs)
+            Text("Animation du contrôleur · ${parent.name}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp))
+            Text("Parent du contrôleur", modifier = Modifier.padding(start = 20.dp, top = 8.dp))
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                OutlinedButton(onClick = { controllerParentMenuExpanded = true }) {
+                    Text(controllerParent?.name ?: "Aucun parent")
+                }
+                DropdownMenu(
+                    expanded = controllerParentMenuExpanded,
+                    onDismissRequest = { controllerParentMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Aucun parent") },
+                        onClick = { vm.setNullParent(parent.id, null); controllerParentMenuExpanded = false },
+                    )
+                    state.nullObjects.filter { it.id != parent.id }.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item.name) },
+                            onClick = { vm.setNullParent(parent.id, item.id); controllerParentMenuExpanded = false },
+                        )
+                    }
+                }
+            }
+            Button(
+                onClick = { vm.setNullKeyframeProperty(parent.id) },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            ) { Text("◆ Ajouter une image clé au Null") }
+            TransformSlider("Null · Position X", transform.x, -1000f..1000f) { vm.setNullKeyframeProperty(parent.id, x = it) }
+            TransformSlider("Null · Position Y", transform.y, -1000f..1000f) { vm.setNullKeyframeProperty(parent.id, y = it) }
+            TransformSlider("Null · Échelle", transform.scale, .1f..4f) { vm.setNullKeyframeProperty(parent.id, scale = it) }
+            TransformSlider("Null · Rotation", transform.rotation, -360f..360f) { vm.setNullKeyframeProperty(parent.id, rotation = it) }
+            TransformSlider("Null · Opacité", transform.opacity, 0f..1f) { vm.setNullKeyframeProperty(parent.id, opacity = it) }
+        }
     }
 }
 

@@ -3,7 +3,13 @@ package com.roadsearch.openeditvideo.media
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.graphics.Typeface
 import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.TypefaceSpan
+import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.Size
@@ -21,6 +27,7 @@ import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextOverlay as TextOverlayModel
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.model.at
 
 /** Builds an absolute-time Media3 composition from the editable NLE timeline. */
 @UnstableApi
@@ -42,14 +49,17 @@ class MultiTrackCompositionFactory(private val context: Context) {
         return Uri.fromFile(file)
     }
 
-    fun build(state: EditorUiState): Composition {
+    fun build(state: EditorUiState, settings: com.roadsearch.openeditvideo.export.ExportSettings = com.roadsearch.openeditvideo.export.ExportSettings()): Composition {
         val clips = state.clips
             .filter { state.trackStates[it.track]?.hidden != true }
             .sortedWith(compareBy<VideoClip> { it.track }.thenBy { it.timelineStartMs }.thenBy { it.id })
         require(clips.isNotEmpty()) { "Aucun clip vidéo à exporter" }
+        // Transitions become opacity ramps (and extra source frames for cross-fades).
+        val prepared = TransitionRenderPlan.prepare(state.transitions, clips)
+        val renderClips = prepared.clips.sortedWith(compareBy<VideoClip> { it.track }.thenBy { it.timelineStartMs }.thenBy { it.id })
         val durationMs = maxOf(
             state.durationMs,
-            clips.maxOf { it.timelineStartMs + clipDurationMs(it) },
+            renderClips.maxOf { it.timelineStartMs + clipDurationMs(it) },
             state.audioClips.maxOfOrNull { it.timelineStartMs + audioDurationMs(it) } ?: 0L,
             state.textOverlays.maxOfOrNull { it.endMs } ?: 0L,
         )
@@ -57,7 +67,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
 
         val videoPlans = buildList<VideoInputPlan> {
             add(VideoInputPlan.Background(durationMs))
-            clips.forEach { add(VideoInputPlan.Clip(it, clipDurationMs(it))) }
+            renderClips.forEach { add(VideoInputPlan.Clip(it, clipDurationMs(it), prepared.fades[it.id])) }
             state.textOverlays
                 .filter { it.endMs > it.startMs && it.text.isNotBlank() }
                 .forEach { add(VideoInputPlan.Text(it)) }
@@ -74,9 +84,15 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .filter { it.endMs > it.startMs }
             .map { buildAudioSequence(it, durationMs) }
 
-        return Composition.Builder(videoSequences + audioSequences)
-            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans))
-            .build()
+        val (canvasW, canvasH) = settings.canvasSize(state.aspect)
+        val outputSize = Size(canvasW, canvasH)
+        val builder = Composition.Builder(videoSequences + audioSequences)
+            .setVideoCompositorSettings(TimelineVideoCompositorSettings(videoPlans, outputSize, state.nullObjects))
+        // Frame rate is a ceiling: frames are dropped to reach 24/30 fps; 60 keeps the source rate.
+        if (settings.fps < 60) {
+            builder.setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(androidx.media3.effect.FrameDropEffect.createDefaultFrameDropEffect(settings.fps.toFloat()))))
+        }
+        return builder.build()
     }
 
     private fun buildBlackBackgroundSequence(durationMs: Long): EditedMediaItemSequence {
@@ -112,6 +128,29 @@ class MultiTrackCompositionFactory(private val context: Context) {
         }.build()
     }
 
+    /** Applies the drawer-selected style (font, colour, size, preset) to the exported text. */
+    private fun styledText(overlay: TextOverlayModel): SpannableString {
+        val st = overlay.style
+        val base = when (st.font) {
+            "bebas" -> ResourcesCompat.getFont(context, com.roadsearch.openeditvideo.R.font.bebas_neue_regular)
+            "inter" -> ResourcesCompat.getFont(context, com.roadsearch.openeditvideo.R.font.inter_variable)
+            "serif" -> Typeface.SERIF
+            "cursive" -> Typeface.create("cursive", Typeface.NORMAL)
+            else -> Typeface.SANS_SERIF
+        } ?: Typeface.SANS_SERIF
+        val face = when (st.preset) {
+            com.roadsearch.openeditvideo.model.TextPreset.CLASSIC, com.roadsearch.openeditvideo.model.TextPreset.BOLD3D -> Typeface.create(base, Typeface.BOLD)
+            com.roadsearch.openeditvideo.model.TextPreset.SCRIPT -> Typeface.create(base, Typeface.ITALIC)
+            com.roadsearch.openeditvideo.model.TextPreset.NEON -> base
+        }
+        return SpannableString(overlay.text).apply {
+            val flag = Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            setSpan(ForegroundColorSpan(st.colorArgb), 0, length, flag)
+            setSpan(AbsoluteSizeSpan(st.size.toInt().coerceIn(12, 220)), 0, length, flag)
+            setSpan(TypefaceSpan(face), 0, length, flag)
+        }
+    }
+
     private fun buildTextSequence(overlay: TextOverlayModel, timelineDurationMs: Long): EditedMediaItemSequence {
         val duration = (overlay.endMs - overlay.startMs).coerceAtLeast(1L)
         val transparent = MediaItem.Builder()
@@ -119,11 +158,11 @@ class MultiTrackCompositionFactory(private val context: Context) {
             .setImageDurationMs(duration)
             .build()
         val settings = StaticOverlaySettings.Builder()
-            .setBackgroundFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(0f, overlay.style.posY.coerceIn(-1f, 1f))
             .setOverlayFrameAnchor(0f, 0f)
             .setScale(1f, 1f)
             .build()
-        val text = TextOverlay.createStaticTextOverlay(SpannableString(overlay.text), settings)
+        val text = TextOverlay.createStaticTextOverlay(styledText(overlay), settings)
         val item = EditedMediaItem.Builder(transparent)
             .setEffects(Effects(emptyList(), listOf<androidx.media3.common.Effect>(OverlayEffect(ImmutableList.of<androidx.media3.effect.TextureOverlay>(text)))))
             .build()
@@ -166,16 +205,17 @@ class MultiTrackCompositionFactory(private val context: Context) {
 
 private sealed interface VideoInputPlan {
     data class Background(val durationMs: Long) : VideoInputPlan
-    data class Clip(val clip: VideoClip, val durationMs: Long) : VideoInputPlan
+    data class Clip(val clip: VideoClip, val durationMs: Long, val fades: TransitionRenderPlan.ClipFades? = null) : VideoInputPlan
     data class Text(val overlay: TextOverlayModel) : VideoInputPlan
 }
 
 @UnstableApi
 private class TimelineVideoCompositorSettings(
     private val plans: List<VideoInputPlan>,
+    private val outputSize: Size,
+    private val nullObjects: List<com.roadsearch.openeditvideo.model.NullObject> = emptyList(),
 ) : androidx.media3.common.VideoCompositorSettings {
-    override fun getOutputSize(inputSizes: List<Size>): Size =
-        Size(MultiTrackCompositionFactory.DEFAULT_WIDTH, MultiTrackCompositionFactory.DEFAULT_HEIGHT)
+    override fun getOutputSize(inputSizes: List<Size>): Size = outputSize
 
     override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): StaticOverlaySettings {
         val plan = plans.getOrNull(inputId) ?: return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
@@ -186,7 +226,7 @@ private class TimelineVideoCompositorSettings(
                 val clip = plan.clip
                 val active = globalMs >= clip.timelineStartMs && globalMs < clip.timelineStartMs + plan.durationMs
                 if (!active) return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
-                val keyframe = clip.keyframesAt(globalMs)
+                val keyframe = com.roadsearch.openeditvideo.scene.SceneGraph.resolve(clip.keyframesAt(globalMs), clip.parentId, nullObjects, globalMs)
                 val x = (keyframe.x / (MultiTrackCompositionFactory.DEFAULT_WIDTH / 2f)).coerceIn(-1f, 1f)
                 val y = (-keyframe.y / (MultiTrackCompositionFactory.DEFAULT_HEIGHT / 2f)).coerceIn(-1f, 1f)
                 val scale = keyframe.scale.coerceIn(0.01f, 20f)
@@ -195,17 +235,26 @@ private class TimelineVideoCompositorSettings(
                     .setOverlayFrameAnchor(0f, 0f)
                     .setScale(scale, scale)
                     .setRotationDegrees(clip.effects.rotation + keyframe.rotation)
-                    .setAlphaScale(keyframe.opacity.coerceIn(0f, 1f))
+                    .setAlphaScale(keyframe.opacity.coerceIn(0f, 1f) * (plan.fades?.factor(globalMs) ?: 1f))
                     .build()
             }
             is VideoInputPlan.Text -> {
                 if (globalMs !in plan.overlay.startMs until plan.overlay.endMs) {
                     StaticOverlaySettings.Builder().setAlphaScale(0f).build()
                 } else {
+                    val transform = com.roadsearch.openeditvideo.scene.SceneGraph.resolve(
+                        plan.overlay.animation.at(globalMs), plan.overlay.parentId, nullObjects, globalMs,
+                    )
+                    val x = (transform.x / (MultiTrackCompositionFactory.DEFAULT_WIDTH / 2f)).coerceIn(-1f, 1f)
+                    val y = (-transform.y / (MultiTrackCompositionFactory.DEFAULT_HEIGHT / 2f)).coerceIn(-1f, 1f)
+                    val posY = (plan.overlay.style.posY + y).coerceIn(-1f, 1f)
+                    val scale = transform.scale.coerceIn(0.01f, 20f)
                     StaticOverlaySettings.Builder()
-                        .setBackgroundFrameAnchor(0f, 0f)
+                        .setBackgroundFrameAnchor(x, posY)
                         .setOverlayFrameAnchor(0f, 0f)
-                        .setAlphaScale(1f)
+                        .setScale(scale, scale)
+                        .setRotationDegrees(transform.rotation)
+                        .setAlphaScale(transform.opacity.coerceIn(0f, 1f))
                         .build()
                 }
             }

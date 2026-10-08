@@ -39,10 +39,19 @@ float radialAlpha(vec2 uv) {
     return 1.0 - smoothstep(r - uFeather, r + uFeather, d);
 }
 
+float ellipseAlpha(vec2 uv) {
+    vec2 center = uMaskRect.xy + uMaskRect.zw * 0.5;
+    vec2 radius = max(uMaskRect.zw * 0.5, vec2(0.0001));
+    float d = length((uv - center) / radius);
+    float f = max(uFeather / max(min(radius.x, radius.y), 0.0001), 0.00001);
+    return 1.0 - smoothstep(1.0 - f, 1.0 + f, d);
+}
+
 void main() {
     vec4 color = texture2D(uTexSampler, vTexSamplingCoord);
     float a;
-    if (uMaskType > 0.5 && uMaskType < 1.5) a = circleAlpha(vTexSamplingCoord);
+    if (uMaskType > 3.5) a = ellipseAlpha(vTexSamplingCoord);
+    else if (uMaskType > 0.5 && uMaskType < 1.5) a = circleAlpha(vTexSamplingCoord);
     else if (uMaskType > 1.5 && uMaskType < 2.5) a = linearAlpha(vTexSamplingCoord);
     else if (uMaskType > 2.5) a = radialAlpha(vTexSamplingCoord);
     else a = rectAlpha(vTexSamplingCoord);

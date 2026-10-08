@@ -19,14 +19,15 @@ import java.io.IOException
 class AnimatedAlphaEffect(
     private val keyframes: List<AnimatedKeyframe>,
     private val sourceStartMs: Long = 0L,
+    private val resolvedOpacityAt: ((Long) -> Float)? = null,
 ) : GlEffect {
     override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram {
         if (useHdr) throw VideoFrameProcessingException("AnimatedAlphaEffect currently supports SDR input only")
         return Program(context)
     }
 
-    override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean = keyframes.isEmpty() ||
-        keyframes.all { it.value >= 0.999f }
+    override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean = resolvedOpacityAt == null &&
+        (keyframes.isEmpty() || keyframes.all { it.value >= 0.999f })
 
     private inner class Program(context: Context) : BaseGlShaderProgram(false, 1) {
         private val program: GlProgram
@@ -54,7 +55,8 @@ class AnimatedAlphaEffect(
         override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
             try {
                 val sourceTimeMs = sourceStartMs + (presentationTimeUs / 1000L).coerceAtLeast(0L)
-                val alpha = keyframes.valueAt(sourceTimeMs, 1f).coerceIn(0f, 1f)
+                val alpha = (resolvedOpacityAt?.invoke(sourceTimeMs) ?: keyframes.valueAt(sourceTimeMs, 1f))
+                    .coerceIn(0f, 1f)
                 program.use()
                 program.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
                 program.setFloatUniform("uAlpha", alpha)

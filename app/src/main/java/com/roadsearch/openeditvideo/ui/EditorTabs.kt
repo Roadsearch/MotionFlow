@@ -27,17 +27,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.roadsearch.openeditvideo.ui.drawers.Drawer
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import com.roadsearch.openeditvideo.model.*
 import kotlin.math.roundToInt
 
 internal enum class EditTab(val label: String, val icon: ImageVector) {
-    EDIT("Éditer", Icons.Rounded.ContentCut),
+    EDIT("Édition", Icons.Rounded.ContentCut),
     AUDIO("Audio", Icons.Rounded.MusicNote),
     TEXT("Texte", Icons.Rounded.TextFields),
-    OVERLAY("Overlay", Icons.Rounded.Layers),
     EFFECTS("Effets", Icons.Rounded.AutoAwesome),
+    OVERLAY("Superposition", Icons.Rounded.Layers),
     FILTERS("Filtres", Icons.Rounded.PhotoFilter),
 }
 
@@ -49,64 +51,66 @@ internal class TabActions(
     val openSheet: (Tool) -> Unit,
     val clipVolume: () -> Unit,
     val musicVolume: () -> Unit,
+    val openDrawer: (Drawer) -> Unit,
+    val openTransition: (Long, Long) -> Unit,
 )
 
 @Composable
-internal fun TransportBar(state: EditorUiState, vm: EditorViewModel) {
+internal fun TransportBar(state: EditorUiState, vm: EditorViewModel, onFullscreen: () -> Unit) {
+    val end = remember(state.clips, state.audioClips, state.textOverlays) { state.timelineEndMs() }
+    val canKeyframe = state.selectedClipContainsPlayhead()
     Row(
-        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().background(Bg).height(46.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "${formatTime(state.positionMs)} / ${formatTime(state.durationMs)}",
-            color = Muted,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Box(
-            Modifier.size(52.dp).clip(CircleShape).background(Accent).clickable { vm.setPlaying(!state.playing) },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                if (state.playing) "Pause" else "Lecture",
-                tint = Color(0xFF04201D),
-                modifier = Modifier.size(30.dp),
-            )
-        }
-        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             IconButton({ vm.undo() }, enabled = vm.canUndo()) {
                 Icon(Icons.AutoMirrored.Rounded.Undo, "Annuler", tint = if (vm.canUndo()) Color.White else Muted)
             }
             IconButton({ vm.redo() }, enabled = vm.canRedo()) {
                 Icon(Icons.AutoMirrored.Rounded.Redo, "Rétablir", tint = if (vm.canRedo()) Color.White else Muted)
             }
-            IconButton(vm::toggleMute) {
-                Icon(
-                    if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
-                    "Son",
-                    tint = if (state.muted) Accent else Color.White,
-                )
+        }
+        Box(
+            Modifier.size(44.dp).clip(CircleShape).clickable(enabled = end > 0L) {
+                if (!state.playing && state.positionMs >= end - 50L) vm.seekTo(0L)
+                vm.setPlaying(!state.playing)
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                if (state.playing) "Pause" else "Lecture",
+                tint = Color.White.copy(alpha = if (end > 0L) 1f else 0.38f),
+                modifier = Modifier.size(34.dp),
+            )
+        }
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            if (state.selectedClipId != null) {
+                IconButton({ vm.setKeyframeProperty() }, enabled = canKeyframe) {
+                    Text("◇+", color = if (canKeyframe) Color.White else Muted, fontSize = 16.sp)
+                }
             }
+            IconButton(onFullscreen) { Icon(Icons.Rounded.Fullscreen, "Plein écran", tint = Color.White) }
         }
     }
 }
 
 @Composable
 internal fun TabBar(selected: EditTab, onSelect: (EditTab) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Bg).navigationBarsPadding().padding(vertical = 4.dp)) {
-        EditTab.entries.forEach { tab ->
-            val active = tab == selected
-            Column(
-                Modifier.weight(1f).clickable { onSelect(tab) }.padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(tab.icon, null, tint = if (active) Accent else Muted, modifier = Modifier.size(22.dp))
-                Text(tab.label, color = if (active) Accent else Muted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                Box(
-                    Modifier.padding(top = 3.dp).width(18.dp).height(3.dp).clip(RoundedCornerShape(2.dp))
-                        .background(if (active) Accent else Color.Transparent),
-                )
+    Column(Modifier.fillMaxWidth().background(Panel)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF2A2A3D)))
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(top = 6.dp, bottom = 4.dp)) {
+            EditTab.entries.forEach { tab ->
+                val tint = if (tab == selected) Accent else Muted
+                Column(
+                    Modifier.weight(1f).clickable { onSelect(tab) }.padding(vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(tab.icon, null, tint = tint, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.height(2.dp))
+                    Text(tab.label, color = tint, fontSize = 10.sp, maxLines = 1, softWrap = false)
+                }
             }
         }
     }
@@ -170,6 +174,7 @@ private fun maskLabel(mask: MaskSettings): String = if (!mask.enabled) "Masque" 
     MaskType.CIRCLE -> "Cercle"
     MaskType.LINEAR_GRADIENT -> "Dégradé"
     MaskType.RADIAL_GRADIENT -> "Radial"
+    MaskType.ELLIPSE -> "Ellipse"
 }
 
 private fun nextMask(mask: MaskSettings): MaskSettings {
@@ -233,15 +238,17 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 ActionChip("Importer", Icons.Rounded.AddPhotoAlternate, onClick = actions.pickVideo)
                 ActionChip("Scinder", Icons.Rounded.ContentCut, hasClip) { vm.split() }
                 ActionChip("Dupliquer", Icons.Rounded.ContentCopy, hasClip) { vm.duplicateSelected() }
-                ActionChip("Supprimer", Icons.Rounded.DeleteOutline, hasClip, tint = Color(0xFFFF8A8A)) { vm.deleteSelected() }
+                ActionChip("Supprimer", Icons.Rounded.DeleteOutline, hasClip || state.selectedAudioId != null || state.selectedTextId != null, tint = Color(0xFFFF8A8A)) { vm.deleteSelected() }
                 ActionChip("Début", Icons.Rounded.FirstPage, hasClip) { vm.trimStart() }
                 ActionChip("Fin", Icons.AutoMirrored.Rounded.LastPage, hasClip) { vm.trimEnd() }
                 ActionChip("Volume", Icons.AutoMirrored.Rounded.VolumeUp, hasClip, onClick = actions.clipVolume)
                 ActionChip("Transition", Icons.Rounded.SwapHoriz, hasClip) { vm.addTransition() }
                 ActionChip("Marqueur", Icons.Rounded.Flag) { vm.addMarkerAtPlayhead() }
+                ActionChip("Outils IA", Icons.Rounded.AutoAwesome) { actions.openDrawer(Drawer.AI) }
             }
             EditTab.AUDIO -> ChipRow {
-                ActionChip("Ajouter", Icons.Rounded.MusicNote, onClick = actions.pickAudio)
+                ActionChip("Ajouter", Icons.Rounded.MusicNote) { actions.openDrawer(Drawer.AUDIO) }
+                ActionChip("Fichier", Icons.Rounded.FileUpload, onClick = actions.pickAudio)
                 ActionChip(
                     "Son vidéo",
                     if (state.muted) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp,
@@ -251,7 +258,8 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 ActionChip("Retirer", Icons.Rounded.DeleteOutline, state.audioClips.isNotEmpty(), tint = Color(0xFFFF8A8A)) { vm.removeLastAudio() }
             }
             EditTab.TEXT -> ChipRow {
-                ActionChip("Ajouter", Icons.Rounded.TextFields, onClick = actions.addText)
+                ActionChip("Ajouter", Icons.Rounded.TextFields) { vm.clearSelection(); actions.openDrawer(Drawer.TEXT_NEW) }
+                ActionChip("Style", Icons.Rounded.Palette, state.selectedTextId != null) { actions.openDrawer(Drawer.TEXT_EDIT) }
                 ActionChip("Retirer", Icons.Rounded.DeleteOutline, state.textOverlays.isNotEmpty(), tint = Color(0xFFFF8A8A)) { vm.removeLastText() }
             }
             EditTab.OVERLAY -> {
@@ -260,7 +268,7 @@ internal fun TabPanel(tab: EditTab, state: EditorUiState, vm: EditorViewModel, a
                 val blend = clip?.let { state.blendModes[it.id] } ?: BlendMode.NORMAL
                 ChipRow {
                     ActionChip("Ajouter", Icons.Rounded.Layers, onClick = actions.pickOverlay)
-                    ActionChip(maskLabel(mask), Icons.Rounded.Crop, hasClip, mask.enabled) { vm.setMask(nextMask(mask)) }
+                    ActionChip("Masque", Icons.Rounded.Crop, hasClip, mask.enabled) { actions.openDrawer(Drawer.MASK) }
                     ActionChip("Chroma", Icons.Rounded.Palette, hasClip, key.enabled) { vm.setChromaKey(key.copy(enabled = !key.enabled)) }
                     ActionChip("Animer", Icons.Rounded.Animation, hasClip) { actions.openSheet(Tool.MORE) }
                 }

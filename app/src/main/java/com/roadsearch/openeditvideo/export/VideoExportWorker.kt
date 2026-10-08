@@ -32,7 +32,7 @@ class VideoExportWorker @AssistedInject constructor(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         setForeground(createForegroundInfo(0))
 
-        val project = repository.get()
+        val project = repository.get(inputData.getString(ExportKeys.PROJECT_ID) ?: ProjectRepository.DEFAULT_PROJECT_ID)
             ?: return@withContext Result.failure(workDataOf(ExportKeys.ERROR to "Projet introuvable"))
         val state = runCatching { EditorStateCodec.decode(project.documentJson) }
             .getOrElse { error ->
@@ -55,7 +55,12 @@ class VideoExportWorker @AssistedInject constructor(
             .let { java.io.File(it.cacheDir, "openedit_export_${System.currentTimeMillis()}.mp4") }
         try {
             setProgress(workDataOf(ExportKeys.PROGRESS to 0))
-            exporter.export(state, output) { progress ->
+            val settings = ExportSettings(
+                resolution = runCatching { ExportResolution.valueOf(inputData.getString(ExportKeys.RESOLUTION) ?: "") }.getOrDefault(ExportResolution.FHD),
+                fps = inputData.getInt(ExportKeys.FPS, 30),
+                highQuality = inputData.getBoolean(ExportKeys.HIGH_QUALITY, true),
+            )
+            exporter.export(state, output, settings) { progress ->
                 val percent = (progress * 100f).toInt().coerceIn(0, 100)
                 // setProgressAsync is safe from the exporter callback without creating a detached scope.
                 setProgressAsync(workDataOf(ExportKeys.PROGRESS to percent))
