@@ -308,7 +308,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
                     if (kotlin.math.abs(player.currentPosition - target) > 350L) player.seekTo(target)
                 }
             }
-            LaunchedEffect(state.muted, clip.id, clip.effects, clip.animation, state.chromaKeys[clip.id]) {
+            LaunchedEffect(state.muted, clip.id, clip.effects, clip.animation, clip.keyframes, clip.parentId, state.nullObjects, state.chromaKeys[clip.id]) {
                 player.volume = if (state.muted) 0f else clip.volume.coerceIn(0f, 2f)
                 player.setVideoEffects(vm.previewEffects(clip))
             }
