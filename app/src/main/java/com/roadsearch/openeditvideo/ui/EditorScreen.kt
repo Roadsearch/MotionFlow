@@ -80,7 +80,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     LaunchedEffect(drawer) {
         if (drawer == Drawer.TEXT_NEW || drawer == Drawer.TEXT_EDIT) {
             val existing = if (drawer == Drawer.TEXT_EDIT) state.textOverlays.firstOrNull { it.id == state.selectedTextId } else null
-            textDraft = TextDraft(existing?.text ?: "Votre texte", existing?.style ?: TextStyleSpec(), existing?.id)
+            textDraft = TextDraft(existing?.text ?: "Votre texte", existing?.style ?: TextStyleSpec(), existing?.id, existing?.parentId)
             vm.setPlaying(false)
             drawer = null
         }
@@ -114,9 +114,10 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         if (fullscreen) FullscreenControls(state, vm) { fullscreen = false }
         TextPanelHost(
             draft = textDraft,
+            nullObjects = state.nullObjects,
             onChange = { textDraft = it },
             onConfirm = {
-                textDraft?.let { d -> if (d.targetId != null) vm.updateText(d.targetId, d.text, d.style) else vm.addText(d.text, d.style) }
+                textDraft?.let { d -> if (d.targetId != null) vm.updateText(d.targetId, d.text, d.style, d.parentId) else vm.addText(d.text, d.style, d.parentId) }
                 textDraft = null
             },
             onCancel = { textDraft = null },
