@@ -40,6 +40,8 @@ data class TextOverlay(
     val startMs: Long,
     val endMs: Long,
     val style: TextStyleSpec = TextStyleSpec(),
+    val parentId: Long? = null,
+    val animation: TransformAnimation = TransformAnimation(),
 )
 
 @Serializable
