@@ -26,6 +26,8 @@ import com.roadsearch.openeditvideo.model.ChromaKeySettings
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.VideoFilter
+import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.scene.SceneGraph
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -61,11 +63,27 @@ class MediaEngine(private val context: Context) {
     fun previewEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
         addAll(effects(clip.effects))
         val animation = clip.animation
-        if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
-            add(AnimatedTransformEffect(animation, clip.startMs))
+        val parents = SceneGraph.ancestors(clip.parentId, state.nullObjects)
+        val localTransformAnimated = animation.x.isNotEmpty() || animation.y.isNotEmpty() ||
+            animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() ||
+            clip.keyframes.any { it.x != 0f || it.y != 0f || it.scale != 1f || it.rotation != 0f }
+        val parentTransformAnimated = parents.any { parent ->
+            val parentAnimation = parent.animation
+            parentAnimation.x.isNotEmpty() || parentAnimation.y.isNotEmpty() ||
+                parentAnimation.scale.isNotEmpty() || parentAnimation.rotation.isNotEmpty()
         }
-        if (animation.opacity.isNotEmpty()) {
-            add(AnimatedAlphaEffect(animation.opacity, clip.startMs))
+        if (localTransformAnimated || parentTransformAnimated) {
+            add(AnimatedTransformEffect(animation, clip.startMs, resolvedTransformAt = { sourceTimeMs ->
+                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
+                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs)
+            }))
+        }
+        val localOpacityAnimated = animation.opacity.isNotEmpty() || clip.keyframes.any { it.opacity != 1f }
+        if (localOpacityAnimated || parents.any { it.animation.opacity.isNotEmpty() }) {
+            add(AnimatedAlphaEffect(animation.opacity, clip.startMs, resolvedOpacityAt = { sourceTimeMs ->
+                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
+                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs).opacity
+            }))
         }
 
         val chroma = state.chromaKeys[clip.id]
