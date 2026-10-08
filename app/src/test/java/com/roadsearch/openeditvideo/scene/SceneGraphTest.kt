@@ -5,6 +5,7 @@ import com.roadsearch.openeditvideo.model.Easing
 import com.roadsearch.openeditvideo.model.Keyframe
 import com.roadsearch.openeditvideo.model.NullObject
 import com.roadsearch.openeditvideo.model.TransformAnimation
+import com.roadsearch.openeditvideo.model.VideoClip
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -61,5 +62,36 @@ class SceneGraphTest {
         assertTrue(SceneGraph.wouldCreateCycle(1, 1, listOf(node(1))))
         assertFalse(SceneGraph.wouldCreateCycle(2, 1, listOf(node(1), node(2))))
         assertFalse(SceneGraph.wouldCreateCycle(1, null, listOf(node(1))))
+    }
+
+    @Test fun `graph validation reports missing clip parents`() {
+        val clip = VideoClip(7, android.net.Uri.parse("content://clip/7"), "child", parentId = 99)
+        assertTrue(SceneGraph.validationErrors(listOf(clip), listOf(node(1))).any { it.contains("parent 99") })
+    }
+
+    @Test fun `graph validation reports cyclic null controllers`() {
+        val cyclic = listOf(node(1, 2), node(2, 1))
+        assertTrue(SceneGraph.validationErrors(emptyList(), cyclic).any { it.contains("cycle") })
+        assertFalse(SceneGraph.canParentClip(1, cyclic))
+    }
+
+    @Test fun `clips can only be parented to a known null in a valid graph`() {
+        val valid = listOf(node(1), node(2, 1))
+        assertTrue(SceneGraph.canParentClip(2, valid))
+        assertFalse(SceneGraph.canParentClip(3, valid))
+        assertTrue(SceneGraph.canParentClip(null, valid))
+    }
+
+    @Test fun `null parenting rejects cycles and accepts detaching`() {
+        val valid = listOf(node(1), node(2, 1), node(3))
+        assertFalse(SceneGraph.canParentNull(1, 2, valid))
+        assertTrue(SceneGraph.canParentNull(3, 2, valid))
+        assertTrue(SceneGraph.canParentNull(2, null, valid))
+        assertFalse(SceneGraph.canParentNull(3, 99, valid))
+    }
+
+    @Test fun `deep null hierarchies are rejected`() {
+        val chain = (1L..(SceneGraph.MAX_DEPTH + 2L)).map { id -> node(id, if (id == 1L) null else id - 1L) }
+        assertTrue(SceneGraph.validationErrors(emptyList(), chain).any { it.contains("profondeur maximale") })
     }
 }
