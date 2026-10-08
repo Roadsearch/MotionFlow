@@ -3,6 +3,7 @@ package com.roadsearch.openeditvideo.scene
 import com.roadsearch.openeditvideo.model.Keyframe
 import com.roadsearch.openeditvideo.model.NullObject
 import com.roadsearch.openeditvideo.model.VideoClip
+import com.roadsearch.openeditvideo.model.TextOverlay
 import com.roadsearch.openeditvideo.model.at
 import kotlin.math.cos
 import kotlin.math.sin
@@ -64,7 +65,7 @@ object SceneGraph {
     }
 
     /** Validate the controller hierarchy and clip-to-controller references before rendering or editing. */
-    fun validationErrors(clips: List<VideoClip>, nulls: List<NullObject>): List<String> = buildList {
+    fun validationErrors(clips: List<VideoClip>, nulls: List<NullObject>, texts: List<TextOverlay> = emptyList()): List<String> = buildList {
         val nullIds = nulls.map { it.id }
         if (nullIds.distinct().size != nullIds.size) add("Les identifiants des objets Null doivent être uniques.")
         val knownIds = nullIds.toSet()
@@ -90,6 +91,18 @@ object SceneGraph {
                 val chain = ancestors(parentId, nulls)
                 if (chain.size >= MAX_DEPTH && chain.lastOrNull()?.parentId != null) {
                     add("La hiérarchie du clip ${clip.id} dépasse la profondeur maximale de $MAX_DEPTH.")
+                }
+            }
+        }
+
+        texts.forEach { text ->
+            val parentId = text.parentId ?: return@forEach
+            if (parentId !in knownIds) {
+                add("Le parent $parentId du texte ${text.id} est introuvable.")
+            } else {
+                val chain = ancestors(parentId, nulls)
+                if (chain.size >= MAX_DEPTH && chain.lastOrNull()?.parentId != null) {
+                    add("La hiérarchie du texte ${text.id} dépasse la profondeur maximale de $MAX_DEPTH.")
                 }
             }
         }
