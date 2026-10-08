@@ -4,6 +4,7 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.scene.SceneGraph
 
 /** Explicit gate for features that still require a custom compositor beyond public Media3 APIs. */
 object ExportCapabilityAnalyzer {
@@ -29,6 +30,7 @@ object ExportCapabilityAnalyzer {
                 if (animated || staticMoved) add("Le blend ${mode.name} du clip $id nécessite encore un blend programmable positionné; le backend avancé actuel ne sait fusionner que le plein cadre.")
             }
         }
+        addAll(SceneGraph.validationErrors(state.clips, state.nullObjects))
         // Fade-through and cross-fade are represented by opacity ramps in the Media3 composition.
         // Unsupported wipes and combinations are rejected by AdvancedRenderPlanner at export time.
     }
