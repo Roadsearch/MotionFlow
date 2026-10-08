@@ -30,7 +30,7 @@ object ExportCapabilityAnalyzer {
                 if (animated || staticMoved) add("Le blend ${mode.name} du clip $id nécessite encore un blend programmable positionné; le backend avancé actuel ne sait fusionner que le plein cadre.")
             }
         }
-        addAll(SceneGraph.validationErrors(state.clips, state.nullObjects))
+        addAll(SceneGraph.validationErrors(state.clips, state.nullObjects, state.textOverlays))
         // Fade-through and cross-fade are represented by opacity ramps in the Media3 composition.
         // Unsupported wipes and combinations are rejected by AdvancedRenderPlanner at export time.
     }
