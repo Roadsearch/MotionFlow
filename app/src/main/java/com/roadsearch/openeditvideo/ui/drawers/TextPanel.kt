@@ -46,21 +46,26 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextStyleSpec
+import com.roadsearch.openeditvideo.model.NullObject
+import com.roadsearch.openeditvideo.model.Keyframe
+import com.roadsearch.openeditvideo.model.at
+import com.roadsearch.openeditvideo.scene.SceneGraph
 import com.roadsearch.openeditvideo.ui.components.pressable
 import com.roadsearch.openeditvideo.ui.theme.MfColors
 
 /** Text being edited. Lives above the timeline (not in the model) until the user confirms with the check mark. */
-internal data class TextDraft(val text: String, val style: TextStyleSpec, val targetId: Long?)
+internal data class TextDraft(val text: String, val style: TextStyleSpec, val targetId: Long?, val parentId: Long? = null)
 
 /** Non-modal bottom panel: no scrim, the top bar, the preview and the transport stay visible and live. */
 @Composable
-internal fun BoxScope.TextPanelHost(draft: TextDraft?, onChange: (TextDraft) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
+internal fun BoxScope.TextPanelHost(draft: TextDraft?, nullObjects: List<NullObject>, onChange: (TextDraft) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
     var last by remember { mutableStateOf(draft) }
     if (draft != null) last = draft
     AnimatedVisibility(
@@ -68,11 +73,11 @@ internal fun BoxScope.TextPanelHost(draft: TextDraft?, onChange: (TextDraft) -> 
         modifier = Modifier.align(Alignment.BottomCenter),
         enter = slideInVertically { it } + fadeIn(),
         exit = slideOutVertically { it } + fadeOut(),
-    ) { last?.let { TextPanel(it, onChange, onConfirm, onCancel) } }
+    ) { last?.let { TextPanel(it, nullObjects, onChange, onConfirm, onCancel) } }
 }
 
 @Composable
-private fun TextPanel(draft: TextDraft, onChange: (TextDraft) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun TextPanel(draft: TextDraft, nullObjects: List<NullObject>, onChange: (TextDraft) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     val style = draft.style
     fun setStyle(s: TextStyleSpec) = onChange(draft.copy(style = s))
@@ -101,7 +106,7 @@ private fun TextPanel(draft: TextDraft, onChange: (TextDraft) -> Unit, onConfirm
         }
         Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(MfColors.Outline))
         Spacer(Modifier.height(8.dp))
-        DrawerTabs(listOf("Styles", "Polices", "Position"), tab) { tab = it }
+        DrawerTabs(listOf("Styles", "Polices", "Position", "Parent"), tab) { tab = it }
         Spacer(Modifier.height(8.dp))
 
         Column(Modifier.heightIn(max = 230.dp).verticalScroll(rememberScrollState())) {
@@ -146,13 +151,25 @@ private fun TextPanel(draft: TextDraft, onChange: (TextDraft) -> Unit, onConfirm
                         ) { Text(label, color = Color.White, style = TextStyle(fontFamily = familyFor(key), fontSize = 18.sp)) }
                     }
                 }
-                else -> LabeledSlider(
+                2 -> LabeledSlider(
                     "Position verticale", if (style.posY > 0.05f) "Haut" else if (style.posY < -0.05f) "Bas" else "Centre",
                     style.posY, -0.9f..0.9f, onChange = { setStyle(style.copy(posY = it)) },
                 )
+                else -> Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ParentChoice("Aucun", draft.parentId == null) { onChange(draft.copy(parentId = null)) }
+                    nullObjects.forEach { node -> ParentChoice(node.name, draft.parentId == node.id) { onChange(draft.copy(parentId = node.id)) } }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ParentChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(label, color = Color.White, modifier = Modifier.clip(RoundedCornerShape(12.dp))
+        .background(if (selected) MfColors.Active.copy(alpha = .22f) else MfColors.Card)
+        .border(1.dp, if (selected) MfColors.Active else MfColors.Outline, RoundedCornerShape(12.dp))
+        .pressable(role = null, onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp))
 }
 
 /** Texts visible at the playhead, drawn over the video preview; the draft being edited replaces its original. */
@@ -160,16 +177,30 @@ private fun TextPanel(draft: TextDraft, onChange: (TextDraft) -> Unit, onConfirm
 internal fun BoxScope.PreviewTexts(state: EditorUiState, draft: TextDraft?) {
     state.textOverlays
         .filter { it.id != draft?.targetId && state.positionMs in it.startMs..it.endMs }
-        .forEach { PreviewText(it.text, it.style) }
-    if (draft != null) PreviewText(draft.text, draft.style)
+        .forEach {
+            val transform = SceneGraph.resolve(it.animation.at(state.positionMs), it.parentId, state.nullObjects, state.positionMs)
+            PreviewText(it.text, it.style, transform)
+        }
+    if (draft != null) {
+        val local = draft.targetId?.let { id -> state.textOverlays.firstOrNull { it.id == id }?.animation?.at(state.positionMs) } ?: Keyframe(state.positionMs)
+        PreviewText(draft.text, draft.style, SceneGraph.resolve(local, draft.parentId, state.nullObjects, state.positionMs))
+    }
 }
 
 @Composable
-private fun BoxScope.PreviewText(text: String, style: TextStyleSpec) {
+private fun BoxScope.PreviewText(text: String, style: TextStyleSpec, transform: Keyframe) {
     Box(
         Modifier.fillMaxSize().padding(12.dp),
-        contentAlignment = BiasAlignment(0f, -style.posY.coerceIn(-0.85f, 0.85f)),
+        contentAlignment = BiasAlignment(
+            (transform.x / 540f).coerceIn(-1f, 1f),
+            (-style.posY - transform.y / 960f).coerceIn(-1f, 1f),
+        ),
     ) {
-        Text(text.ifBlank { " " }, style = previewStyle(style, (style.size / 3f).coerceIn(12f, 56f)), textAlign = TextAlign.Center, maxLines = 3)
+        Text(text.ifBlank { " " }, modifier = Modifier.graphicsLayer {
+            scaleX = transform.scale.coerceIn(.01f, 20f)
+            scaleY = transform.scale.coerceIn(.01f, 20f)
+            rotationZ = transform.rotation
+            alpha = transform.opacity.coerceIn(0f, 1f)
+        }, style = previewStyle(style, (style.size / 3f).coerceIn(12f, 56f)), textAlign = TextAlign.Center, maxLines = 3)
     }
 }
