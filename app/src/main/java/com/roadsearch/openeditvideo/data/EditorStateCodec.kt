@@ -9,8 +9,8 @@ import org.json.JSONObject
  * Keeping the schema in a codec makes future migrations independent from the UI state class.
  */
 object EditorStateCodec {
-    /** 6: preserves audio source duration; all fields added in previous versions remain backward compatible. */
-    private const val VERSION = 6
+    /** 7: text layers can be parented and animated; older projects default to no parent/animation. */
+    private const val VERSION = 7
 
     fun encode(state: EditorUiState): String = JSONObject().apply {
         put("version", VERSION)
@@ -163,6 +163,8 @@ object EditorStateCodec {
 
     private fun text(t: TextOverlay) = JSONObject().apply {
         put("id", t.id); put("text", t.text); put("start", t.startMs); put("end", t.endMs)
+        t.parentId?.let { put("parent", it) }
+        put("animation", animation(t.animation))
         put("style", JSONObject().apply {
             put("preset", t.style.preset.name); put("font", t.style.font); put("color", t.style.colorArgb)
             put("size", t.style.size.toDouble()); put("posY", t.style.posY.toDouble())
@@ -179,6 +181,8 @@ object EditorStateCodec {
                 posY = s.optDouble("posY", 0.0).toFloat(),
             )
         } ?: TextStyleSpec(),
+        parentId = if (o.has("parent")) o.getLong("parent") else null,
+        animation = readAnimation(o.optJSONObject("animation")),
     )
 
     private fun effects(e: EffectSettings) = JSONObject().apply {
