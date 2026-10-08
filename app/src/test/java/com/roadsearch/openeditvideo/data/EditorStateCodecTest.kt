@@ -1,6 +1,7 @@
 package com.roadsearch.openeditvideo.data
 
 import com.roadsearch.openeditvideo.model.AnimatedKeyframe
+import com.roadsearch.openeditvideo.model.AudioClip
 import com.roadsearch.openeditvideo.model.AspectRatio
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.Easing
@@ -25,6 +26,7 @@ class EditorStateCodecTest {
         val state = EditorUiState(
             aspect = AspectRatio.LANDSCAPE,
             coverMs = 1234L,
+            audioClips = listOf(AudioClip(12, android.net.Uri.parse("content://audio/12"), "Audio", startMs = 1_000L, endMs = 6_000L, sourceDurationMs = 30_000L)),
             textOverlays = listOf(TextOverlay(1, "Salut", 100, 900, TextStyleSpec(TextPreset.NEON, "bebas", 0xFFFF4FD8.toInt(), 80f, .4f))),
             transitions = listOf(Transition(7, 1, 2, 600, TransitionType.CROSS_FADE)),
             nullObjects = listOf(
@@ -38,12 +40,13 @@ class EditorStateCodecTest {
         assertEquals(state.coverMs, back.coverMs)
         assertEquals(state.textOverlays, back.textOverlays)
         assertEquals(state.transitions, back.transitions)
+        assertEquals(state.audioClips, back.audioClips)
         assertEquals(state.nullObjects, back.nullObjects)
         assertEquals(state.masks, back.masks)
     }
 
     @Test fun `projects written before the new fields still load with defaults`() {
-        val old = EditorStateCodec.decode("""{"version":4}""")
+        val old = EditorStateCodec.decode("""{"version":5}""")
         assertEquals(AspectRatio.PORTRAIT, old.aspect)
         assertEquals(0L, old.coverMs)
         assertTrue(old.nullObjects.isEmpty())
