@@ -19,6 +19,8 @@ data class VideoClip(
     val animation: TransformAnimation = TransformAnimation(),
     val effects: EffectSettings = EffectSettings(),
     val parentId: Long? = null,
+    /** Elements sharing a group id move together (linked audio/video/text). Null = not linked. */
+    val groupId: Long? = null,
 )
 
 @Serializable
@@ -31,6 +33,7 @@ data class AudioClip(
     val sourceDurationMs: Long = 0L,
     val volume: Float = 1f,
     val timelineStartMs: Long = 0L,
+    val groupId: Long? = null,
 )
 
 @Serializable
@@ -42,6 +45,7 @@ data class TextOverlay(
     val style: TextStyleSpec = TextStyleSpec(),
     val parentId: Long? = null,
     val animation: TransformAnimation = TransformAnimation(),
+    val groupId: Long? = null,
 )
 
 @Serializable
