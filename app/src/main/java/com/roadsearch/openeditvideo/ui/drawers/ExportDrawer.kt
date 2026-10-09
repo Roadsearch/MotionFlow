@@ -1,6 +1,7 @@
 package com.roadsearch.openeditvideo.ui.drawers
 
 import androidx.compose.foundation.background
+import com.roadsearch.openeditvideo.core.TimelineValidator
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -117,16 +118,19 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
     val canExport = first != null
     val blockingTransitions = state.transitions.count { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }
     val hasBlend = state.blendModes.any { it.value != BlendMode.NORMAL }
+    val textClashes = remember(state.textOverlays) { TimelineValidator.textOverlaps(state).size }
     val canRun = canExport && blockingTransitions == 0
     val context = LocalContext.current
     val resolutions = ExportResolution.entries
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
+    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
         DrawerHeader("Exporter", onClose)
+        // Settings scroll; the warnings and the Export button below stay pinned and always visible.
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
 
         Box(
-            Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(170.dp).clip(RoundedCornerShape(16.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF2B1B4E), Color(0xFFD9653B)))),
+            Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(150.dp).clip(RoundedCornerShape(16.dp))
+                .background(MfColors.Card),
             contentAlignment = Alignment.Center,
         ) {
             val uri = first?.uri
@@ -156,6 +160,7 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
         Spacer(Modifier.height(10.dp))
         SwitchRow("HDR", "Indisponible : les effets GPU sont en SDR", checked = false, enabled = false) {}
         SwitchRow("Qualité élevée", "Débit vidéo plus élevé, fichier plus lourd", settings.highQuality, true) { vm.setExportSettings(settings.copy(highQuality = it)) }
+        }
 
         Spacer(Modifier.height(12.dp))
         if (blockingTransitions > 0) {
@@ -174,6 +179,10 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
             Spacer(Modifier.height(10.dp))
         } else if (hasBlend) {
             Caption("Modes de fusion actifs : l'export peut échouer si le moteur FFmpeg optionnel n'est pas installé.")
+            Spacer(Modifier.height(6.dp))
+        }
+        if (textClashes > 0) {
+            Caption("$textClashes texte(s) s'affichent en même temps au même endroit. Ajustez leur position ou leur durée.")
             Spacer(Modifier.height(6.dp))
         }
         GradientButton("Exporter", enabled = canRun) { vm.exportWith(settings); onClose() }

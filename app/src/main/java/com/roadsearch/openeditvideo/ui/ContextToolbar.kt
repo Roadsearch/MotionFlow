@@ -36,6 +36,9 @@ import androidx.compose.material.icons.rounded.FirstPage
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.LinkOff
+import androidx.compose.material.icons.rounded.SpaceBar
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.MusicNote
@@ -59,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.roadsearch.openeditvideo.core.TimelineMath
+import com.roadsearch.openeditvideo.core.editor.TimelineOps
 import com.roadsearch.openeditvideo.model.ChromaKeySettings
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.MaskSettings
@@ -112,12 +116,16 @@ private fun clipItems(state: EditorUiState, vm: EditorViewModel, a: TabActions, 
     val key = state.chromaKeys[clip.id] ?: ChromaKeySettings()
     val mask = state.masks[clip.id] ?: MaskSettings()
     val track = state.trackStates[clip.track]
+    val inside = state.selectedClipContainsPlayhead()
     return buildList {
-        add(ToolItem("Diviser", Icons.Rounded.ContentCut) { vm.split() })
+        add(ToolItem("Diviser", Icons.Rounded.ContentCut, inside) { vm.split() })
         add(ToolItem("Dupliquer", Icons.Rounded.ContentCopy) { vm.duplicateSelected() })
         add(ToolItem("Supprimer", Icons.Rounded.DeleteOutline, tint = Danger) { vm.deleteSelected() })
-        add(ToolItem("Début", Icons.Rounded.FirstPage) { vm.trimStart() })
-        add(ToolItem("Fin", Icons.AutoMirrored.Rounded.LastPage) { vm.trimEnd() })
+        if (!overlay) add(ToolItem("Laisser un vide", Icons.Rounded.SpaceBar, tint = Danger) { vm.deleteSelectedKeepingGap() })
+        if (clip.groupId != null) add(ToolItem("Dissocier", Icons.Rounded.LinkOff) { vm.ungroupSelected() })
+        else if (state.selectedClipIds.size >= 2) add(ToolItem("Grouper", Icons.Rounded.Link) { vm.groupSelectedClips() })
+        add(ToolItem("Début", Icons.Rounded.FirstPage, inside) { vm.trimStart() })
+        add(ToolItem("Fin", Icons.AutoMirrored.Rounded.LastPage, inside) { vm.trimEnd() })
         add(ToolItem("Volume", Icons.AutoMirrored.Rounded.VolumeUp, onClick = a.clipVolume))
         add(ToolItem("Régler", Icons.Rounded.Tune) { a.openSheet(com.roadsearch.openeditvideo.model.Tool.EFFECTS) })
         add(ToolItem("Filtre", Icons.Rounded.PhotoFilter) { a.openDrawer(Drawer.FILTERS) })
@@ -149,16 +157,22 @@ private fun clipItems(state: EditorUiState, vm: EditorViewModel, a: TabActions, 
     }
 }
 
+private fun linkItem(state: EditorUiState, vm: EditorViewModel): ToolItem =
+    if (TimelineOps.selectedGroupId(state) != null) ToolItem("Dissocier", Icons.Rounded.LinkOff) { vm.ungroupSelected() }
+    else ToolItem("Lier à la vidéo", Icons.Rounded.Link, enabled = state.clips.isNotEmpty()) { vm.linkSelectedToVideo() }
+
 private fun textItems(state: EditorUiState, vm: EditorViewModel, a: TabActions) = listOf(
     ToolItem("Style", Icons.Rounded.Palette) { a.openDrawer(Drawer.TEXT_EDIT) },
     ToolItem("Ajouter", Icons.Rounded.TextFields) { vm.clearSelection(); a.openDrawer(Drawer.TEXT_NEW) },
     ToolItem("Supprimer", Icons.Rounded.DeleteOutline, tint = Danger) { vm.deleteSelected() },
+    linkItem(state, vm),
 )
 
 private fun audioItems(state: EditorUiState, vm: EditorViewModel, a: TabActions) = listOf(
     ToolItem("Volume", Icons.AutoMirrored.Rounded.VolumeUp, onClick = a.musicVolume),
     ToolItem("Ajouter", Icons.Rounded.MusicNote) { a.openDrawer(Drawer.AUDIO) },
     ToolItem("Supprimer", Icons.Rounded.DeleteOutline, tint = Danger) { vm.deleteSelected() },
+    linkItem(state, vm),
 )
 
 /**

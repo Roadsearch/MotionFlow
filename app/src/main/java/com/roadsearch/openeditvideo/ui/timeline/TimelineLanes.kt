@@ -225,7 +225,7 @@ internal fun VideoLane(
         }
         if (clips.isEmpty()) {
             Text(
-                "Importez un média pour commencer",
+                "Importez un média",
                 color = MfColors.TextMuted, fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
             )

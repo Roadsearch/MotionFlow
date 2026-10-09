@@ -17,6 +17,7 @@ import com.roadsearch.openeditvideo.data.ProjectRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import com.roadsearch.openeditvideo.core.TimelineValidator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -30,11 +31,17 @@ class VideoExportWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        setForeground(createForegroundInfo(0))
+        try {
+            setForeground(createForegroundInfo(0))
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (refused: Exception) {
+            // Android 12+ can refuse a foreground service started from the background: export without the notification.
+        }
 
         val project = repository.get(inputData.getString(ExportKeys.PROJECT_ID) ?: ProjectRepository.DEFAULT_PROJECT_ID)
             ?: return@withContext Result.failure(workDataOf(ExportKeys.ERROR to "Projet introuvable"))
-        val state = runCatching { EditorStateCodec.decode(project.documentJson) }
+        val state = runCatching { TimelineValidator.repair(EditorStateCodec.decode(project.documentJson)) }
             .getOrElse { error ->
                 return@withContext Result.failure(
                     workDataOf(ExportKeys.ERROR to "Projet illisible: ${error.message ?: "JSON invalide"}")
@@ -100,7 +107,7 @@ class VideoExportWorker @AssistedInject constructor(
             .createCancelPendingIntent(id)
         val notification = NotificationCompat.Builder(applicationContext, channelId)
             .setSmallIcon(R.drawable.ic_export)
-            .setContentTitle("OpenEditVideo")
+            .setContentTitle("MotionFlow")
             .setContentText("Export vidéo… $bounded%")
             .setOngoing(bounded < 100)
             .setOnlyAlertOnce(true)

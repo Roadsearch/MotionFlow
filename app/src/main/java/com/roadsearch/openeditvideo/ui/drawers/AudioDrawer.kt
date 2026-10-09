@@ -66,7 +66,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class AudioCategory(val label: String, val keywords: List<String>) {
-    TREND("Tendance", emptyList()),
+    TREND("Récents", emptyList()),
     POP("Pop", listOf("pop")),
     LOFI("Lo-Fi", listOf("lo-fi", "lofi", "chill")),
     CINE("Ciné", listOf("cine", "ciné", "film", "soundtrack", "score", "ost")),
