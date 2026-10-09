@@ -1,6 +1,8 @@
 package com.roadsearch.openeditvideo.ui.timeline
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -76,7 +78,8 @@ private fun Capsule(content: @Composable RowScope.() -> Unit) {
 @Composable
 private fun CapsuleButton(description: String, enabled: Boolean = true, onClick: () -> Unit, icon: @Composable () -> Unit) {
     Box(
-        Modifier.size(42.dp).clip(CircleShape).pressable(enabled = enabled, onClick = onClick),
+        Modifier.size(42.dp).clip(CircleShape).pressable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }

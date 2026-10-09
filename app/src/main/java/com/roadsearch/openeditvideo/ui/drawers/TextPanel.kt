@@ -106,7 +106,7 @@ private fun TextPanel(draft: TextDraft, nullObjects: List<NullObject>, onChange:
         }
         Box(Modifier.align(Alignment.CenterHorizontally).width(36.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(MfColors.Outline))
         Spacer(Modifier.height(8.dp))
-        DrawerTabs(listOf("Styles", "Polices", "Position", "Parent"), tab) { tab = it }
+        DrawerTabs(listOf("Styles", "Polices", "Position", "Attacher"), tab) { tab = it }
         Spacer(Modifier.height(8.dp))
 
         Column(Modifier.heightIn(max = 230.dp).verticalScroll(rememberScrollState())) {
@@ -138,6 +138,7 @@ private fun TextPanel(draft: TextDraft, nullObjects: List<NullObject>, onChange:
                             )
                         }
                     }
+                    Spacer(Modifier.height(10.dp))
                     LabeledSlider("Taille", "${style.size.toInt()}", style.size, 28f..140f, onChange = { setStyle(style.copy(size = it)) })
                 }
                 1 -> Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -155,9 +156,18 @@ private fun TextPanel(draft: TextDraft, nullObjects: List<NullObject>, onChange:
                     "Position verticale", if (style.posY > 0.05f) "Haut" else if (style.posY < -0.05f) "Bas" else "Centre",
                     style.posY, -0.9f..0.9f, onChange = { setStyle(style.copy(posY = it)) },
                 )
-                else -> Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ParentChoice("Aucun", draft.parentId == null) { onChange(draft.copy(parentId = null)) }
-                    nullObjects.forEach { node -> ParentChoice(node.name, draft.parentId == node.id) { onChange(draft.copy(parentId = node.id)) } }
+                else -> Column {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ParentChoice("Aucun", draft.parentId == null) { onChange(draft.copy(parentId = null)) }
+                        nullObjects.forEach { node -> ParentChoice(node.name, draft.parentId == node.id) { onChange(draft.copy(parentId = node.id)) } }
+                    }
+                    if (nullObjects.isEmpty()) {
+                        Text(
+                            "Aucun objet de contrôle. Créez-en un depuis l'outil Animation d'un clip pour déplacer plusieurs éléments ensemble.",
+                            color = MfColors.TextMuted, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
         }

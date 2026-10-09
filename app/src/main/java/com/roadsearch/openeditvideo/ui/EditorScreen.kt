@@ -28,6 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import com.roadsearch.openeditvideo.scene.SceneGraph
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -197,9 +202,9 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
         }
         Spacer(Modifier.width(6.dp))
         Box {
-            TopPill(resolution.label.lowercase()) { resolutionMenu = true }
+            TopPill(resolution.label) { resolutionMenu = true }
             DropdownMenu(resolutionMenu, { resolutionMenu = false }) {
-                ExportResolution.entries.forEach { r -> DropdownMenuItem({ Text(r.label.lowercase()) }, onClick = { onResolution(r); resolutionMenu = false }) }
+                ExportResolution.entries.forEach { r -> DropdownMenuItem({ Text(r.label) }, onClick = { onResolution(r); resolutionMenu = false }) }
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -320,6 +325,7 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
             )
         }
         if (fadeAlpha < 1f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 1f - fadeAlpha)))
+        PreviewOverlayClips(state, vm)
         PreviewTexts(state, textDraft)
     }
     }
@@ -382,3 +388,80 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 @Composable private fun TextDialog(close:()->Unit, add:(String)->Unit){var text by remember{mutableStateOf("")}; AlertDialog(onDismissRequest=close,title={Text("Ajouter un texte")},text={OutlinedTextField(text,{text=it},label={Text("Texte")},singleLine=true)},confirmButton={TextButton({add(text);close()}){Text("Ajouter")}},dismissButton={TextButton(close){Text("Annuler")}})}
 internal fun formatTime(ms:Long):String{val t=ms.coerceAtLeast(0)/1000;return "%02d:%02d".format(t/60,t%60)}
 private fun displayName(context:Context,uri:Uri):String?=context.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}
+
+/**
+ * Overlay clips (every track above the main one) that are active at the playhead, drawn above the main video.
+ * Stills use their keyframed position/scale/rotation/opacity; videos get their own player and the same GPU effects as
+ * the main clip. Hidden tracks are skipped. Masks and blend modes of overlays are only applied at export.
+ */
+@Composable
+private fun PreviewOverlayClips(state: EditorUiState, vm: EditorViewModel) {
+    val main = state.clips.minOfOrNull { it.track } ?: return
+    val active = state.clips
+        .filter { c ->
+            c.track > main && state.trackStates[c.track]?.hidden != true &&
+                state.positionMs >= c.timelineStartMs &&
+                state.positionMs < c.timelineStartMs + TimelineMath.duration(c, c.sourceDurationMs.coerceAtLeast(state.durationMs))
+        }
+        .sortedBy { it.track }
+    active.forEach { c ->
+        key(c.id) {
+            if (c.sourceDurationMs >= STILL_SOURCE_MS) OverlayStill(c, state) else OverlayVideo(c, state, vm)
+        }
+    }
+}
+
+@Composable
+private fun OverlayStill(clip: VideoClip, state: EditorUiState) {
+    val context = LocalContext.current
+    val request = remember(clip.uri) { ImageRequest.Builder(context).data(clip.uri).build() }
+    val look = SceneGraph.resolve(clip.keyframesAt(state.positionMs), clip.parentId, state.nullObjects, state.positionMs)
+    AsyncImage(
+        model = request,
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.fillMaxSize().graphicsLayer {
+            // Same design space as the export: a 1080x1920 canvas, +y pointing up.
+            translationX = look.x / 1080f * size.width
+            translationY = -look.y / 1920f * size.height
+            scaleX = look.scale
+            scaleY = look.scale
+            rotationZ = look.rotation
+            alpha = look.opacity.coerceIn(0f, 1f)
+        },
+    )
+}
+
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+private fun OverlayVideo(clip: VideoClip, state: EditorUiState, vm: EditorViewModel) {
+    val context = LocalContext.current
+    val latest by rememberUpdatedState(state)
+    val player = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(clip.uri)); prepare() } }
+    DisposableEffect(player) { onDispose { player.release() } }
+    fun localTarget(): Long {
+        val cur = latest.clips.firstOrNull { it.id == clip.id } ?: clip
+        return (cur.startMs + (latest.positionMs - cur.timelineStartMs)).coerceAtLeast(0L)
+    }
+    LaunchedEffect(player, state.seekNonce, state.playing) {
+        val target = localTarget()
+        if (kotlin.math.abs(player.currentPosition - target) > 120L) player.seekTo(target)
+        player.playWhenReady = latest.playing
+    }
+    LaunchedEffect(player, state.playing) {
+        if (state.playing) while (isActive) {
+            delay(400)
+            val target = localTarget()
+            if (kotlin.math.abs(player.currentPosition - target) > 350L) player.seekTo(target)
+        }
+    }
+    LaunchedEffect(state.muted, clip.id, clip.effects, clip.animation, clip.keyframes, clip.parentId, state.nullObjects, state.chromaKeys[clip.id]) {
+        player.volume = if (state.muted) 0f else clip.volume.coerceIn(0f, 2f)
+        player.setVideoEffects(vm.previewEffects(clip))
+    }
+    AndroidView(
+        factory = { PlayerView(it).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT } },
+        update = { it.player = player },
+        modifier = Modifier.fillMaxSize(),
+    )
+}

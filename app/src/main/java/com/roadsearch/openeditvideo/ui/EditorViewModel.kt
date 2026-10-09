@@ -11,6 +11,9 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.roadsearch.openeditvideo.core.TimelineMath
+import com.roadsearch.openeditvideo.core.TimelineValidator
+import com.roadsearch.openeditvideo.core.editor.TimelineEditor
+import com.roadsearch.openeditvideo.core.editor.TimelineOps
 import com.roadsearch.openeditvideo.data.ProjectRepository
 import com.roadsearch.openeditvideo.data.EditorStateCodec
 import com.roadsearch.openeditvideo.export.ExportKeys
@@ -76,6 +79,7 @@ class EditorViewModel @Inject constructor(
         val nullObjects: List<NullObject>,
     )
 
+    private val editor = TimelineEditor()
     private val undoStack = ArrayDeque<Snapshot>()
     private val redoStack = ArrayDeque<Snapshot>()
 
@@ -87,7 +91,7 @@ class EditorViewModel @Inject constructor(
                 // always tags the restored state with the new id.
                 hydrated = false
                 undoStack.clear(); redoStack.clear()
-                _state.value = runCatching { EditorStateCodec.decode(entity.documentJson) }.getOrNull() ?: EditorUiState()
+                _state.value = runCatching { TimelineValidator.repair(EditorStateCodec.decode(entity.documentJson)) }.getOrNull() ?: EditorUiState()
                 hydratedId = entity.id
                 hydrated = true
                 pendingImport?.let { (uri, name) -> pendingImport = null; import(uri, name) }
@@ -324,6 +328,7 @@ class EditorViewModel @Inject constructor(
             fallbackDurationMs = state.durationMs,
         )
         _state.update { it.copy(clips = it.clips.map { item -> if (item.id == id) moved else item }) }
+        propagateGroupMove(clip.groupId, moved.timelineStartMs - clip.timelineStartMs, skipClipId = id)
     }
 
     fun updateClip(clip: VideoClip) {
@@ -357,9 +362,11 @@ class EditorViewModel @Inject constructor(
     // ---- Audio & text lanes: move / trim ------------------------------------
 
     fun moveAudio(id: Long, deltaMs: Long) {
-        if (_state.value.audioClips.none { it.id == id }) return
+        val audio = _state.value.audioClips.firstOrNull { it.id == id } ?: return
         if (!gestureOpen) record()
-        _state.update { s -> s.copy(audioClips = s.audioClips.map { if (it.id == id) it.copy(timelineStartMs = (it.timelineStartMs + deltaMs).coerceAtLeast(0L)) else it }) }
+        val newStart = (audio.timelineStartMs + deltaMs).coerceAtLeast(0L)
+        _state.update { s -> s.copy(audioClips = s.audioClips.map { if (it.id == id) it.copy(timelineStartMs = newStart) else it }) }
+        propagateGroupMove(audio.groupId, newStart - audio.timelineStartMs, skipAudioId = id)
     }
 
     fun trimAudioLeft(id: Long, deltaMs: Long) {
@@ -387,6 +394,7 @@ class EditorViewModel @Inject constructor(
         val start = (t.startMs + deltaMs).coerceAtLeast(0L)
         val length = t.endMs - t.startMs
         _state.update { s -> s.copy(textOverlays = s.textOverlays.map { if (it.id == id) it.copy(startMs = start, endMs = start + length) else it }) }
+        propagateGroupMove(t.groupId, start - t.startMs, skipTextId = id)
     }
 
     fun trimTextLeft(id: Long, deltaMs: Long) {
@@ -605,24 +613,10 @@ class EditorViewModel @Inject constructor(
         val state = _state.value
         val clip = state.selectedClip() ?: return
         if (isTrackLocked(clip.track)) return
-        val length = TimelineMath.duration(clip, clip.sourceDurationMs.coerceAtLeast(state.durationMs))
-        if (length <= 0L) return
+        val newId = System.nanoTime()
+        if (TimelineOps.duplicate(state, clip.id, newId) == null) return
         record()
-        val copy = clip.copy(id = System.nanoTime(), name = "${clip.name} (copie)", timelineStartMs = clip.timelineStartMs + length)
-        _state.update { s ->
-            val shifted = s.clips.map { c ->
-                if (clip.track == 0 && c.track == 0 && c.id != clip.id && c.timelineStartMs >= clip.timelineStartMs + length) {
-                    c.copy(timelineStartMs = c.timelineStartMs + length)
-                } else c
-            }
-            val index = shifted.indexOfFirst { it.id == clip.id }
-            if (index < 0) s else s.copy(
-                clips = shifted.toMutableList().apply { add(index + 1, copy) },
-                selectedClipId = copy.id,
-                selectedClipIds = setOf(copy.id),
-                durationMs = maxOf(s.durationMs, copy.timelineStartMs + length),
-            )
-        }
+        _state.update { s -> TimelineOps.duplicate(s, clip.id, newId) ?: s }
     }
 
     fun setSelectedVolume(value: Float) {
@@ -671,7 +665,7 @@ class EditorViewModel @Inject constructor(
                         clips = s.clips + VideoClip(
                             id = id, uri = uri, name = name, endMs = duration,
                             sourceDurationMs = if (probed > 0L) duration else STILL_SOURCE_MS,
-                            track = 1, timelineStartMs = start,
+                            track = TimelineOps.freeOverlayTrack(s.clips, start, duration, s.durationMs), timelineStartMs = start,
                         ),
                         selectedClipId = id,
                         selectedClipIds = setOf(id),
@@ -709,20 +703,24 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    fun trimStart() = updateSelected { clip, state ->
-        val newStart = state.positionMs
-            .let { (it - clip.timelineStartMs + clip.startMs) }
-            .coerceIn(clip.startMs, clip.end(state.durationMs) - TimelineMath.MIN_CLIP_DURATION_MS)
-        clip.copy(
-            startMs = newStart,
-            timelineStartMs = (clip.timelineStartMs + (newStart - clip.startMs)).coerceAtLeast(0L),
-        )
+    /** Trims the start of the selected clip to the playhead (no-op when the playhead is not inside the clip). */
+    fun trimStart() {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        if (isTrackLocked(clip.track)) return
+        val trimmed = editor.trimStartAt(clip, state.positionMs, clip.sourceDurationMs.coerceAtLeast(state.durationMs)) ?: return
+        record()
+        _state.update { s -> s.copy(clips = s.clips.map { if (it.id == clip.id) trimmed else it }) }
     }
 
-    fun trimEnd() = updateSelected { clip, state ->
-        val newEnd = (state.positionMs - clip.timelineStartMs + clip.startMs)
-            .coerceIn(clip.startMs + TimelineMath.MIN_CLIP_DURATION_MS, clip.end(state.durationMs))
-        clip.copy(endMs = newEnd)
+    /** Trims the end of the selected clip to the playhead (no-op when the playhead is not inside the clip). */
+    fun trimEnd() {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        if (isTrackLocked(clip.track)) return
+        val trimmed = editor.trimEndAt(clip, state.positionMs, clip.sourceDurationMs.coerceAtLeast(state.durationMs)) ?: return
+        record()
+        _state.update { s -> s.copy(clips = s.clips.map { if (it.id == clip.id) trimmed else it }) }
     }
 
     private fun updateSelected(transform: (VideoClip, EditorUiState) -> VideoClip) {
@@ -732,60 +730,85 @@ class EditorViewModel @Inject constructor(
         _state.update { it.copy(clips = it.clips.map { clip -> if (clip.id == selected.id) transform(selected, state) else clip }) }
     }
 
+    /** Cuts the selected clip at the playhead. Does nothing when the playhead is outside the clip or too close to an edge. */
     fun split() {
         val state = _state.value
         val clip = state.selectedClip() ?: return
-        val end = clip.end(clip.sourceDurationMs.coerceAtLeast(state.durationMs))
-        val split = state.positionMs.coerceIn(clip.timelineStartMs + TimelineMath.MIN_CLIP_DURATION_MS, clip.timelineStartMs + (end - clip.startMs) - TimelineMath.MIN_CLIP_DURATION_MS)
-        val sourceSplit = clip.startMs + (split - clip.timelineStartMs)
-        if (sourceSplit <= clip.startMs || sourceSplit >= end) return
+        if (isTrackLocked(clip.track)) return
+        val newId = System.nanoTime()
+        if (TimelineOps.split(state, clip.id, state.positionMs, newId) == null) return
         record()
-        val first = clip.copy(id = System.nanoTime(), endMs = sourceSplit, name = "${clip.name} · 1")
-        val second = clip.copy(id = System.nanoTime() + 1, startMs = sourceSplit, endMs = clip.endMs, timelineStartMs = split, name = "${clip.name} · 2")
-        val index = state.clips.indexOfFirst { it.id == clip.id }
-        val list = state.clips.toMutableList().apply {
-            removeAt(index)
-            add(index, first)
-            add(index + 1, second)
-        }
-        _state.update { it.copy(clips = list, selectedClipId = second.id, selectedClipIds = setOf(second.id)) }
+        _state.update { s -> TimelineOps.split(s, clip.id, s.positionMs, newId) ?: s }
     }
 
-    fun deleteSelected() {
+    /**
+     * Deletes the selection. On the main track [ripple] closes the gap (Ripple Delete); with false a hole is left
+     * (Delete). Clips on locked tracks are never deleted.
+     */
+    fun deleteSelected(ripple: Boolean = true) {
         val state = _state.value
         state.selectedAudioId?.let { id ->
             record()
-            _state.update { it.copy(audioClips = it.audioClips.filterNot { a -> a.id == id }, selectedAudioId = null) }
+            _state.update { TimelineOps.normalizeGroups(it.copy(audioClips = it.audioClips.filterNot { a -> a.id == id }, selectedAudioId = null)) }
             return
         }
         state.selectedTextId?.let { id ->
             record()
-            _state.update { it.copy(textOverlays = it.textOverlays.filterNot { t -> t.id == id }, selectedTextId = null) }
+            _state.update { TimelineOps.normalizeGroups(it.copy(textOverlays = it.textOverlays.filterNot { t -> t.id == id }, selectedTextId = null)) }
             return
         }
-        val ids = if (state.selectedClipIds.isNotEmpty()) state.selectedClipIds else setOfNotNull(state.selectedClipId)
+        val wanted = if (state.selectedClipIds.isNotEmpty()) state.selectedClipIds else setOfNotNull(state.selectedClipId)
+        val ids = state.clips.filter { it.id in wanted && !isTrackLocked(it.track) }.map { it.id }.toSet()
         if (ids.isEmpty()) return
         record()
-        val removed = state.clips.filter { it.id in ids && it.track == 0 }
-        val shifts = removed
-            .sortedBy { it.timelineStartMs }
-            .map { TimelineMath.duration(it, it.sourceDurationMs.coerceAtLeast(state.durationMs)) to it.timelineStartMs }
-        var list = state.clips.filterNot { it.id in ids }
-        for ((duration, start) in shifts) {
-            list = list.map { clip ->
-                if (clip.track == 0 && clip.timelineStartMs > start) {
-                    clip.copy(timelineStartMs = (clip.timelineStartMs - duration).coerceAtLeast(0L))
-                } else clip
-            }
-        }
-        val next = list.firstOrNull { it.track == 0 }
-        _state.update {
-            it.copy(
-                clips = list,
-                selectedClipId = next?.id,
-                selectedClipIds = next?.let { setOf(it.id) } ?: emptySet(),
-                playing = false,
-            )
+        _state.update { s -> TimelineOps.delete(s, ids, ripple).copy(playing = false) }
+    }
+
+    /** Delete that closes the gap on the main track. */
+    fun rippleDeleteSelected() = deleteSelected(ripple = true)
+
+    /** Delete that leaves an empty space where the clip was. */
+    fun deleteSelectedKeepingGap() = deleteSelected(ripple = false)
+
+    // ---- Link groups (linked audio / video / text move together) ---------------------------------------------
+
+    /** Links the multi-selected video clips together. */
+    fun groupSelectedClips() {
+        val ids = _state.value.selectedClipIds
+        if (ids.size < 2) return
+        record()
+        val groupId = System.nanoTime()
+        _state.update { TimelineOps.group(it, ids, emptySet(), emptySet(), groupId) }
+    }
+
+    /** Links the selected audio or text to the main-track clip under the playhead. */
+    fun linkSelectedToVideo() {
+        val s = _state.value
+        val audioIds = setOfNotNull(s.selectedAudioId)
+        val textIds = setOfNotNull(s.selectedTextId)
+        if (audioIds.isEmpty() && textIds.isEmpty()) return
+        val main = s.clips.filter { it.track == TimelineOps.MAIN_TRACK }
+        val target = main.firstOrNull { c ->
+            s.positionMs >= c.timelineStartMs &&
+                s.positionMs < c.timelineStartMs + TimelineMath.duration(c, c.sourceDurationMs.coerceAtLeast(s.durationMs))
+        } ?: main.firstOrNull() ?: return
+        record()
+        val groupId = target.groupId ?: System.nanoTime()
+        _state.update { TimelineOps.group(it, setOf(target.id), audioIds, textIds, groupId) }
+    }
+
+    /** Releases the group of the selected element. */
+    fun ungroupSelected() {
+        val groupId = TimelineOps.selectedGroupId(_state.value) ?: return
+        record()
+        _state.update { TimelineOps.ungroup(it, groupId) }
+    }
+
+    /** Followers of a linked group move by the amount the dragged element really moved (never before 0). */
+    private fun propagateGroupMove(groupId: Long?, deltaMs: Long, skipClipId: Long? = null, skipAudioId: Long? = null, skipTextId: Long? = null) {
+        if (groupId == null || deltaMs == 0L) return
+        _state.update { s ->
+            TimelineOps.shiftMates(s, groupId, deltaMs, skipClipId, skipAudioId, skipTextId, s.trackStates.filterValues { it.locked }.keys)
         }
     }
 

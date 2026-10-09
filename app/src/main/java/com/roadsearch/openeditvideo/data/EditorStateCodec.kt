@@ -9,8 +9,8 @@ import org.json.JSONObject
  * Keeping the schema in a codec makes future migrations independent from the UI state class.
  */
 object EditorStateCodec {
-    /** 7: text layers can be parented and animated; older projects default to no parent/animation. */
-    private const val VERSION = 7
+    /** 8: clips, audio and texts can belong to a link group. 7: text layers can be parented and animated. Older projects default to none. */
+    private const val VERSION = 8
 
     fun encode(state: EditorUiState): String = JSONObject().apply {
         put("version", VERSION)
@@ -134,6 +134,7 @@ object EditorStateCodec {
         put("animation", animation(c.animation))
         put("effects", effects(c.effects))
         c.parentId?.let { put("parent", it) }
+        c.groupId?.let { put("group", it) }
     }
 
     private fun readClip(o: JSONObject) = VideoClip(
@@ -145,12 +146,14 @@ object EditorStateCodec {
         keyframes = readKeyframes(o.optJSONArray("keyframes")), animation = readAnimation(o.optJSONObject("animation")),
         effects = readEffects(o.optJSONObject("effects") ?: JSONObject()),
         parentId = if (o.has("parent")) o.getLong("parent") else null,
+        groupId = if (o.has("group")) o.getLong("group") else null,
     )
 
     private fun audio(a: AudioClip) = JSONObject().apply {
         put("id", a.id); put("uri", a.uri.toString()); put("name", a.name)
         put("start", a.startMs); put("end", a.endMs); put("sourceDuration", a.sourceDurationMs)
         put("volume", a.volume.toDouble()); put("timelineStart", a.timelineStartMs)
+        a.groupId?.let { put("group", it) }
     }
 
     private fun readAudio(o: JSONObject) = AudioClip(
@@ -158,12 +161,14 @@ object EditorStateCodec {
         startMs = o.optLong("start", 0L), endMs = o.optLong("end", 0L),
         sourceDurationMs = o.optLong("sourceDuration", 0L).takeIf { it > 0L } ?: o.optLong("end", 0L).coerceAtLeast(o.optLong("start", 0L)),
         volume = o.optDouble("volume", 1.0).toFloat(),
-        timelineStartMs = o.optLong("timelineStart", 0L)
+        timelineStartMs = o.optLong("timelineStart", 0L),
+        groupId = if (o.has("group")) o.getLong("group") else null,
     )
 
     private fun text(t: TextOverlay) = JSONObject().apply {
         put("id", t.id); put("text", t.text); put("start", t.startMs); put("end", t.endMs)
         t.parentId?.let { put("parent", it) }
+        t.groupId?.let { put("group", it) }
         put("animation", animation(t.animation))
         put("style", JSONObject().apply {
             put("preset", t.style.preset.name); put("font", t.style.font); put("color", t.style.colorArgb)
@@ -183,6 +188,7 @@ object EditorStateCodec {
         } ?: TextStyleSpec(),
         parentId = if (o.has("parent")) o.getLong("parent") else null,
         animation = readAnimation(o.optJSONObject("animation")),
+        groupId = if (o.has("group")) o.getLong("group") else null,
     )
 
     private fun effects(e: EffectSettings) = JSONObject().apply {
