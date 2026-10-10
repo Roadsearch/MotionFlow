@@ -34,6 +34,8 @@ fun AnimationPanel(vm: EditorViewModel) {
     var easing by remember(clip.id, state.easing) { mutableStateOf(state.easing) }
     var activeProperty by remember(clip.id) { mutableStateOf(AnimatedProperty.SCALE) }
     var showCurveEditor by remember(clip.id) { mutableStateOf(false) }
+    var showClearPropertyDialog by remember(clip.id) { mutableStateOf(false) }
+    val keyExistsAtPlayhead = keyframes.any { it.timeMs == sourceTime }
 
     val keyframes = clip.effectiveAnimation().keyframes(activeProperty).sortedBy { it.timeMs }
     val sourceEnd = clip.end(state.durationMs).coerceAtLeast(clip.startMs + 1L)
@@ -94,20 +96,28 @@ fun AnimationPanel(vm: EditorViewModel) {
                 onClick = { vm.seekToPreviousKeyframe(activeProperty) },
                 modifier = Modifier.weight(0.8f),
             ) { Text("◂ ◆") }
-            Button(
-                onClick = { vm.setKeyframeProperty() },
-                modifier = Modifier.weight(1.2f),
-            ) { Text("◆ Ajouter") }
+            Box(
+                modifier = Modifier
+                    .weight(1.2f)
+                    .height(44.dp)
+                    .pointerInput(clip.id, activeProperty, state.positionMs, keyExistsAtPlayhead) {
+                        detectTapGestures(
+                            onTap = { vm.toggleKeyframeAtPlayhead(activeProperty) },
+                            onLongPress = { showClearPropertyDialog = true },
+                        )
+                    },
+                contentAlignment = androidx.compose.ui.Alignment.Center,
+            ) {
+                Text(
+                    if (keyExistsAtPlayhead) "◆ Actif" else "◇ Ajouter",
+                    color = if (keyExistsAtPlayhead) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
             OutlinedButton(
                 onClick = { vm.seekToNextKeyframe(activeProperty) },
                 modifier = Modifier.weight(0.8f),
             ) { Text("◆ ▸") }
-            OutlinedButton(
-                onClick = { vm.removeKeyframeAtPlayhead(activeProperty) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Supprimer les keyframes à la tête de lecture")
-            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -169,6 +179,25 @@ fun AnimationPanel(vm: EditorViewModel) {
             active = activeProperty == AnimatedProperty.OPACITY,
             onActivate = { activeProperty = AnimatedProperty.OPACITY },
         ) { vm.setKeyframeProperty(opacity = it) }
+    }
+
+    if (showClearPropertyDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearPropertyDialog = false },
+            title = { Text("Supprimer les images clés ?") },
+            text = {
+                Text("Supprimer toutes les images clés de « ${activeProperty.label} » ? Les autres propriétés ne seront pas modifiées.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.clearKeyframes(activeProperty)
+                    showClearPropertyDialog = false
+                }) { Text("Tout supprimer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearPropertyDialog = false }) { Text("Annuler") }
+            },
+        )
     }
 
     if (showCurveEditor) {
