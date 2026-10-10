@@ -143,7 +143,7 @@ object FfmpegTimelineCommandBuilder {
         if (fadeIn > 0L) envelopeFactors += "(t/${seconds(fadeIn)})"
         if (fadeOut > 0L) envelopeFactors += "((${seconds(duration)}-t)/${seconds(fadeOut)})"
         val envelope = envelopeFactors.reduce { current, factor -> "min($current,$factor)" }
-        val gain = volume.coerceIn(0f, 2f)
+        val gain = volume.coerceIn(0f, 1f)
         filters += if (envelopeFactors.size == 1) {
             "volume=$gain"
         } else {
