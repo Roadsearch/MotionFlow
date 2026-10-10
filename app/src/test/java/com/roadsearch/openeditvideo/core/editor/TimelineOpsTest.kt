@@ -198,4 +198,27 @@ class TimelineOpsTest {
         assertEquals(7L, TimelineOps.selectedGroupId(s))
         assertNull(TimelineOps.selectedGroupId(s.copy(selectedClipId = null)))
     }
+
+    // ---- group moves and collisions ----------------------------------------------------------------------------
+
+    @Test fun aGroupMoveIsRefusedWhenAFollowerWouldLandOnAnotherClip() {
+        val s = state(
+            clip(1, 0, group = 7),
+            clip(2, 0, track = 1, group = 7),
+            clip(3, 1_500, track = 1),
+        )
+        assertTrue(TimelineOps.followersCanShift(s, 7, 400, skipClipId = 1))    // 400..1400 stays clear of 1500
+        assertTrue(!TimelineOps.followersCanShift(s, 7, 800, skipClipId = 1))   // 800..1800 hits the clip at 1500
+    }
+
+    @Test fun lockedTracksAndZeroMovesNeverBlock() {
+        val s = state(clip(1, 0, group = 7), clip(2, 0, track = 1, group = 7), clip(3, 500, track = 1))
+        assertTrue(TimelineOps.followersCanShift(s, 7, 0, skipClipId = 1))
+        assertTrue(TimelineOps.followersCanShift(s, 7, 300, skipClipId = 1, lockedTracks = setOf(1)))
+    }
+
+    @Test fun followersDoNotBlockEachOtherOrTheDraggedClip() {
+        val s = state(clip(1, 0, group = 7), clip(2, 1_000, group = 7), clip(3, 2_000, group = 7))
+        assertTrue(TimelineOps.followersCanShift(s, 7, 600, skipClipId = 1))
+    }
 }
