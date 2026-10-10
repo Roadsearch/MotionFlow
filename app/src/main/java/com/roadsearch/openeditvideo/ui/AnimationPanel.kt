@@ -22,6 +22,7 @@ import com.roadsearch.openeditvideo.model.AnimatedKeyframe
 import com.roadsearch.openeditvideo.model.AnimatedProperty
 import com.roadsearch.openeditvideo.model.Easing
 import com.roadsearch.openeditvideo.model.keyframes
+import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.model.selectedClip
 import com.roadsearch.openeditvideo.model.end
 
