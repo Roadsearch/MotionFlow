@@ -683,30 +683,36 @@ class EditorViewModel @Inject constructor(
         _state.update { it.copy(positionMs = position, playing = false, seekNonce = it.seekNonce + 1) }
     }
 
-    fun removeKeyframeAtPlayhead() {
+    /** Deletes one property's key at the playhead; null deletes all property keys at that time. */
+    fun removeKeyframeAtPlayhead(property: AnimatedProperty? = null) {
         val state = _state.value
         val clip = state.selectedClip() ?: return
         val local = state.positionMs - clip.timelineStartMs + clip.startMs
         val animation = clip.effectiveAnimation()
-        val has = listOf(animation.x, animation.y, animation.scale, animation.rotation, animation.opacity)
-            .any { values -> values.any { it.timeMs == local } }
-        if (!has) return
+        val tracks = property?.let { listOf(animation.keyframes(it)) }
+            ?: listOf(animation.x, animation.y, animation.scale, animation.rotation, animation.opacity)
+        if (tracks.none { values -> values.any { it.timeMs == local } }) return
         record()
         _state.update { root ->
             root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) {
+                if (item.id != clip.id) item else {
                     val effective = item.effectiveAnimation()
-                    item.copy(
-                        animation = effective.copy(
+                    val updated = if (property == null) {
+                        effective.copy(
                             x = effective.x.filterNot { it.timeMs == local },
                             y = effective.y.filterNot { it.timeMs == local },
                             scale = effective.scale.filterNot { it.timeMs == local },
                             rotation = effective.rotation.filterNot { it.timeMs == local },
                             opacity = effective.opacity.filterNot { it.timeMs == local },
-                        ),
-                        keyframes = emptyList(),
-                    )
-                } else item
+                        )
+                    } else {
+                        effective.withKeyframes(
+                            property,
+                            effective.keyframes(property).filterNot { it.timeMs == local },
+                        )
+                    }
+                    item.copy(animation = updated, keyframes = emptyList())
+                }
             })
         }
     }
