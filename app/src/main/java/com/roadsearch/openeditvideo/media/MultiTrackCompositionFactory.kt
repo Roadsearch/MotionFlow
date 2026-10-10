@@ -196,7 +196,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
                         .setEndPositionMs(audio.startMs + durationMs)
                         .build()
                 ).build()
-        ).setEffects(Effects(listOf(MediaEngine.constantGainProcessor(audio.volume)), emptyList())).build()
+        ).setEffects(Effects(listOf(MediaEngine.audioFadeGainProcessor(audio.volume, durationMs, audio.fadeInMs, audio.fadeOutMs)), emptyList())).build()
         val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
         if (audio.timelineStartMs > 0L) builder.addGap(audio.timelineStartMs * 1000L)
         builder.addItem(item)

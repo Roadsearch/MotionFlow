@@ -139,6 +139,21 @@ class MediaEngine(private val context: Context) {
                     if (gain.coerceIn(0f, 1f) == 1f) androidx.media3.common.C.TIME_END_OF_SOURCE
                     else androidx.media3.common.C.TIME_UNSET
             })
+
+        internal fun audioFadeGainProcessor(
+            volume: Float,
+            durationMs: Long,
+            fadeInMs: Long,
+            fadeOutMs: Long,
+        ): GainProcessor = GainProcessor(object : GainProcessor.GainProvider {
+            override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float =
+                AudioFadeCurve.gainAt(samplePosition, sampleRate, durationMs, volume, fadeInMs, fadeOutMs)
+                    .coerceIn(0f, 1f)
+
+            override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long =
+                if (volume == 1f && fadeInMs <= 0L && fadeOutMs <= 0L) androidx.media3.common.C.TIME_END_OF_SOURCE
+                else androidx.media3.common.C.TIME_UNSET
+        })
     }
 
     private fun resolveEndMs(clip: VideoClip): Long {

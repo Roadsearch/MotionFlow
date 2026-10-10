@@ -34,6 +34,10 @@ data class AudioClip(
     val volume: Float = 1f,
     val timelineStartMs: Long = 0L,
     val groupId: Long? = null,
+    /** Linear fade-in duration in milliseconds; defaults preserve existing projects. */
+    val fadeInMs: Long = 0L,
+    /** Linear fade-out duration in milliseconds; defaults preserve existing projects. */
+    val fadeOutMs: Long = 0L,
 )
 
 @Serializable
