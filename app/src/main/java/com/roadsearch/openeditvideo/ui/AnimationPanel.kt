@@ -103,7 +103,7 @@ fun AnimationPanel(vm: EditorViewModel) {
                 modifier = Modifier.weight(0.8f),
             ) { Text("◆ ▸") }
             OutlinedButton(
-                onClick = { vm.removeKeyframeAtPlayhead() },
+                onClick = { vm.removeKeyframeAtPlayhead(activeProperty) },
                 modifier = Modifier.weight(1f),
             ) {
                 Icon(Icons.Rounded.DeleteOutline, contentDescription = "Supprimer les keyframes à la tête de lecture")
