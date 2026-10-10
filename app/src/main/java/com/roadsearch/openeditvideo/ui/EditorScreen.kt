@@ -295,6 +295,9 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     ) {
         if (state.clips.isEmpty()) {
             EmptyPreview(onImport)
+        } else if (clip != null && clip.sourceDurationMs >= STILL_SOURCE_MS) key(clip.id) {
+            // Photo or generated background: drawn directly, no player (the master clock drives playback).
+            OverlayStill(clip, state)
         } else if (clip != null) key(clip.id) {
             val player = remember { ExoPlayer.Builder(context).build().apply { setMediaItem(MediaItem.fromUri(clip.uri)); prepare() } }
             DisposableEffect(player) { onDispose { player.release() } }

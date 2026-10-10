@@ -25,7 +25,12 @@ import com.roadsearch.openeditvideo.ui.home.HomeActions
 import com.roadsearch.openeditvideo.ui.home.HomeViewModel
 import com.roadsearch.openeditvideo.ui.shell.MainShell
 import com.roadsearch.openeditvideo.ui.theme.MfColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.platform.LocalContext
+import com.roadsearch.openeditvideo.media.ProjectBackgrounds
+import com.roadsearch.openeditvideo.ui.home.NewProjectSheet
 
 /**
  * Root composable: Home shell <-> Editor.
@@ -36,6 +41,8 @@ import kotlinx.coroutines.launch
 fun MotionApp(editorVm: EditorViewModel, homeVm: HomeViewModel = viewModel()) {
     val homeState by homeVm.state.collectAsStateWithLifecycle()
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showNewProject by rememberSaveable { mutableStateOf(false) }
+    val appContext = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(openId) { openId?.let(homeVm::open) }
@@ -45,7 +52,7 @@ fun MotionApp(editorVm: EditorViewModel, homeVm: HomeViewModel = viewModel()) {
 
     val actions = remember(homeVm, editorVm) {
         HomeActions(
-            onNewProject = { scope.launch { openId = homeVm.create() } },
+            onNewProject = { showNewProject = true }, // a photo/video or a background is required first
             onImportMedia = { uri, name ->
                 scope.launch {
                     val id = homeVm.create(name.substringBeforeLast('.').ifBlank { "Nouveau projet" })
@@ -69,6 +76,25 @@ fun MotionApp(editorVm: EditorViewModel, homeVm: HomeViewModel = viewModel()) {
         ) { editing ->
             if (editing) Box(Modifier.fillMaxSize().systemBarsPadding()) { EditorScreen(editorVm, onBack = ::closeEditor) }
             else MainShell(homeState, actions)
+        }
+
+        if (showNewProject) {
+            NewProjectSheet(
+                onDismiss = { showNewProject = false },
+                onMedia = { uri, name ->
+                    showNewProject = false
+                    actions.onImportMedia(uri, name)
+                },
+                onBackground = { preset, aspect ->
+                    showNewProject = false
+                    scope.launch {
+                        val uri = withContext(Dispatchers.IO) { ProjectBackgrounds.uriFor(appContext, preset, aspect) }
+                        val id = homeVm.create()
+                        editorVm.queueImport(uri, "Fond ${preset.label}", aspect)
+                        openId = id
+                    }
+                },
+            )
         }
     }
 }

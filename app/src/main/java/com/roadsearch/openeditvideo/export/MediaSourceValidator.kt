@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.roadsearch.openeditvideo.media.MediaProbe
 import com.roadsearch.openeditvideo.model.AudioClip
+import com.roadsearch.openeditvideo.model.STILL_SOURCE_MS
 import com.roadsearch.openeditvideo.model.VideoClip
 
 /** Performs cheap, user-facing validation before an expensive Transformer job starts. */
@@ -22,6 +23,8 @@ object MediaSourceValidator {
 
         clips.filter { it.track == 0 }.forEach { clip ->
             validateUri(context, clip.uri, clip.name, errors)
+            // Photos and generated backgrounds have no source duration to check.
+            if (clip.sourceDurationMs >= STILL_SOURCE_MS) return@forEach
             val sourceDuration = MediaProbe.durationMsOrNull(context, clip.uri)
             if (sourceDuration == null) {
                 errors += "Durée source indéterminée : ${clip.name}"

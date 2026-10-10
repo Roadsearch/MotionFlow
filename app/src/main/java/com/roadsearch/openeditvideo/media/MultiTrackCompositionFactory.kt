@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList
 import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextOverlay as TextOverlayModel
+import com.roadsearch.openeditvideo.model.STILL_SOURCE_MS
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.model.at
@@ -109,8 +110,12 @@ class MultiTrackCompositionFactory(private val context: Context) {
         val itemEffects = MediaEngine(context).effectsForClipForComposition(state, clip)
         val sourceEnd = clip.startMs + clipDurationMs
         val trackMuted = state.trackStates[clip.track]?.muted == true
-        val trackTypes = if (clip.track == 0 && !trackMuted) setOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) else setOf(C.TRACK_TYPE_VIDEO)
-        val item = EditedMediaItem.Builder(
+        val still = clip.sourceDurationMs >= STILL_SOURCE_MS
+        val trackTypes = if (!still && clip.track == 0 && !trackMuted) setOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) else setOf(C.TRACK_TYPE_VIDEO)
+        val mediaItem = if (still) {
+            // Photos and generated backgrounds have no timeline of their own: Media3 needs an explicit duration.
+            MediaItem.Builder().setUri(clip.uri).setImageDurationMs(clipDurationMs.coerceAtLeast(1L)).build()
+        } else {
             MediaItem.Builder()
                 .setUri(clip.uri)
                 .setClippingConfiguration(
@@ -120,7 +125,9 @@ class MultiTrackCompositionFactory(private val context: Context) {
                         .build()
                 )
                 .build()
-        ).setEffects(itemEffects).build()
+        }
+        val effects = if (still) Effects(emptyList(), itemEffects.videoEffects) else itemEffects
+        val item = EditedMediaItem.Builder(mediaItem).setEffects(effects).build()
         return EditedMediaItemSequence.Builder(trackTypes).apply {
             if (prefixUs > 0L) addGap(prefixUs)
             addItem(item)
