@@ -1,6 +1,8 @@
 package com.roadsearch.openeditvideo.export
 
+import com.roadsearch.openeditvideo.core.IssueSeverity
 import com.roadsearch.openeditvideo.core.TimelineMath
+import com.roadsearch.openeditvideo.core.TimelineValidator
 import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TransitionType
@@ -24,6 +26,13 @@ object ExportCapabilityAnalyzer {
             }
         }
         addAll(SceneGraph.validationErrors(state.clips, state.nullObjects, state.textOverlays))
+        // Refuse structurally invalid timelines rather than handing impossible trims or duplicate IDs to the renderer.
+        // Warnings (overlaps, text collisions, orphan settings) remain non-blocking and are not surfaced as export errors.
+        addAll(
+            TimelineValidator.validate(state)
+                .filter { it.severity == IssueSeverity.ERROR }
+                .map { it.message }
+        )
         // Fade-through and cross-fade are represented by opacity ramps in the Media3 composition.
         // Keep this capability gate aligned with AdvancedRenderPlanner; never silently export unsupported transitions.
         val active = state.transitions.filter { it.type != TransitionType.CUT }

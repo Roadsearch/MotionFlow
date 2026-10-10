@@ -46,6 +46,18 @@ class ExportCapabilityAnalyzerTest {
         assertTrue(errors.any { it.contains("mode de fusion") })
     }
 
+    @Test fun rejectsVideoClipWithInvalidTrimRange() {
+        val invalid = clip(1, 0).copy(startMs = 1_200L, endMs = 1_000L, sourceDurationMs = 2_000L)
+        val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(invalid)))
+        assertTrue(errors.any { it.contains("fin antérieure") })
+    }
+
+    @Test fun rejectsNegativeTimelineStart() {
+        val invalid = clip(1, 0).copy(timelineStartMs = -1L)
+        val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(invalid)))
+        assertTrue(errors.any { it.contains("commence avant 0") })
+    }
+
     @Test fun allowsMedia3FadeTransitionsThroughCapabilityGate() {
         val state = EditorUiState(
             clips = listOf(clip(1, 0), clip(2, 1_000)),
