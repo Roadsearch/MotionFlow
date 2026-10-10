@@ -19,7 +19,7 @@ class FfmpegTimelineCommandBuilderTest {
                     startMs = 2000,
                     endMs = 5000,
                     sourceDurationMs = 10000,
-                    volume = 1.5f,
+                    volume = 0.75f,
                     timelineStartMs = 4000,
                     fadeInMs = 1000,
                     fadeOutMs = 1000,
