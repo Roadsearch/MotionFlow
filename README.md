@@ -34,7 +34,7 @@ gradle wrapper --gradle-version 9.4.0
 ```
 
 ## Documentation
-- `V66-V75.md`, `V76.md` — notes de version
+- `V66-V75.md`, `V76.md`, `V77.md` — notes de version
 - `OPENEDIT_REMAINING.md` — ce qui reste avant production
 - `OPEN_SOURCE_COMPONENTS.md` — projets open source repérés pour combler les manques
 - `OPEN_SOURCE_ROADMAP.md`, `OPEN_SOURCE_STACK.md`, `OPEN_SOURCE_ENGINEERING.md`
