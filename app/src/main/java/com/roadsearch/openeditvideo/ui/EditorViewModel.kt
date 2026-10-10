@@ -592,38 +592,92 @@ class EditorViewModel @Inject constructor(
         val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
             .coerceIn(clip.startMs, clip.end(state.durationMs))
         val current = clip.keyframesAt(state.positionMs)
+        val addAllProperties = x == null && y == null && scale == null && rotation == null && opacity == null
         record()
 
-        fun put(list: List<AnimatedKeyframe>, value: Float, easing: Easing): List<AnimatedKeyframe> {
-            val k = AnimatedKeyframe(local, value, easing)
-            return (list.filterNot { it.timeMs == local } + k).sortedBy { it.timeMs }
+        fun put(list: List<AnimatedKeyframe>, value: Float): List<AnimatedKeyframe> {
+            val key = AnimatedKeyframe(local, value, state.easing)
+            return (list.filterNot { it.timeMs == local } + key).sortedBy { it.timeMs }
         }
 
-        val target = if (listOf(x, y, scale, rotation, opacity).all { it == null }) {
-            listOf(current.x, current.y, current.scale, current.rotation, current.opacity)
-        } else {
-            listOf(x, y, scale, rotation, opacity).mapIndexed { index, value ->
-                value ?: when (index) {
-                    0 -> current.x
-                    1 -> current.y
-                    2 -> current.scale
-                    3 -> current.rotation
-                    else -> current.opacity
-                }
-            }
-        }
+        val animation = clip.animation.copy(
+            x = if (addAllProperties || x != null) put(clip.animation.x, x ?: current.x) else clip.animation.x,
+            y = if (addAllProperties || y != null) put(clip.animation.y, y ?: current.y) else clip.animation.y,
+            scale = if (addAllProperties || scale != null) put(clip.animation.scale, scale ?: current.scale) else clip.animation.scale,
+            rotation = if (addAllProperties || rotation != null) put(clip.animation.rotation, rotation ?: current.rotation) else clip.animation.rotation,
+            opacity = if (addAllProperties || opacity != null) put(clip.animation.opacity, opacity ?: current.opacity) else clip.animation.opacity,
+        )
 
         _state.update { root ->
             root.copy(clips = root.clips.map { item ->
-                if (item.id != clip.id) item else item.copy(animation = item.animation.copy(
-                    x = put(item.animation.x, target[0], state.easing),
-                    y = put(item.animation.y, target[1], state.easing),
-                    scale = put(item.animation.scale, target[2], state.easing),
-                    rotation = put(item.animation.rotation, target[3], state.easing),
-                    opacity = put(item.animation.opacity, target[4], state.easing),
-                ))
+                if (item.id == clip.id) item.copy(animation = animation) else item
             })
         }
+    }
+
+    /** Applies an easing curve to the segment starting at a specific keyframe. */
+    fun updateKeyframeCurve(
+        property: AnimatedProperty,
+        keyframeTimeMs: Long,
+        easing: Easing,
+        curveX1: Float,
+        curveY1: Float,
+        curveX2: Float,
+        curveY2: Float,
+    ) {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        val keys = clip.animation.keyframes(property)
+        if (keys.none { it.timeMs == keyframeTimeMs }) return
+        record()
+        val updatedKeys = keys.map { key ->
+            if (key.timeMs == keyframeTimeMs) key.copy(
+                easingToNext = easing,
+                curveX1 = curveX1.coerceIn(0f, 1f),
+                curveY1 = curveY1.coerceIn(-2f, 3f),
+                curveX2 = curveX2.coerceIn(0f, 1f),
+                curveY2 = curveY2.coerceIn(-2f, 3f),
+            ) else key
+        }
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id == clip.id) item.copy(animation = item.animation.withKeyframes(property, updatedKeys)) else item
+            })
+        }
+    }
+
+    /** Quick preset: update the active segment and the default used for newly placed keyframes. */
+    fun setSegmentEasing(property: AnimatedProperty, easing: Easing) {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
+            .coerceIn(clip.startMs, clip.end(state.durationMs))
+        val keys = clip.animation.keyframes(property).sortedBy { it.timeMs }
+        val start = keys.lastOrNull { it.timeMs <= local } ?: keys.firstOrNull() ?: return
+        updateKeyframeCurve(
+            property = property,
+            keyframeTimeMs = start.timeMs,
+            easing = easing,
+            curveX1 = start.curveX1,
+            curveY1 = start.curveY1,
+            curveX2 = start.curveX2,
+            curveY2 = start.curveY2,
+        )
+    }
+
+    fun seekToPreviousKeyframe(property: AnimatedProperty) = seekToAdjacentKeyframe(property, forward = false)
+
+    fun seekToNextKeyframe(property: AnimatedProperty) = seekToAdjacentKeyframe(property, forward = true)
+
+    private fun seekToAdjacentKeyframe(property: AnimatedProperty, forward: Boolean) {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        val local = state.positionMs - clip.timelineStartMs + clip.startMs
+        val keys = clip.animation.keyframes(property).sortedBy { it.timeMs }
+        val target = if (forward) keys.firstOrNull { it.timeMs > local } else keys.lastOrNull { it.timeMs < local }
+            ?: return
+        val position = (clip.timelineStartMs + target.timeMs - clip.startMs).coerceAtLeast(clip.timelineStartMs)
+        _state.update { it.copy(positionMs = position, playing = false, seekNonce = it.seekNonce + 1) }
     }
 
     fun removeKeyframeAtPlayhead() {
