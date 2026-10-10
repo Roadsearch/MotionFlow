@@ -118,6 +118,7 @@ fun AnimationPanel(vm: EditorViewModel) {
                 onClick = { vm.seekToNextKeyframe(activeProperty) },
                 modifier = Modifier.weight(0.8f),
             ) { Text("◆ ▸") }
+        }
 
         Spacer(Modifier.height(8.dp))
         Text("Interpolation rapide", modifier = Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.labelLarge)
