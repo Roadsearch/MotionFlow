@@ -80,15 +80,30 @@ object FfmpegTimelineCommandBuilder {
             val start = seconds(clip.timelineStartMs)
             val duration = seconds((clip.endMs - clip.startMs).coerceAtLeast(0L))
             val label = "va${audioInputs.size}"
-            parts += "[$input:a]atrim=start=${seconds(clip.startMs)}:duration=$duration,asetpts=PTS-STARTPTS,adelay=${clip.timelineStartMs}:all=1,volume=${clip.volume.coerceIn(0f, 1f)}[$label]"
+            parts += audioFilterChain(
+                input = input,
+                sourceStartMs = clip.startMs,
+                durationMs = (clip.endMs - clip.startMs).coerceAtLeast(0L),
+                timelineStartMs = clip.timelineStartMs,
+                volume = clip.volume,
+                label = label,
+            )
             audioInputs += "[$label]"
         }
         val audioOffset = videoClips.size
         state.audioClips.sortedBy { it.id }.forEachIndexed { idx, clip ->
             val input = audioOffset + idx
             val label = "aa${audioInputs.size}"
-            val duration = seconds((clip.endMs - clip.startMs).coerceAtLeast(0L))
-            parts += "[$input:a]atrim=duration=$duration,asetpts=PTS-STARTPTS,adelay=${clip.timelineStartMs}:all=1,volume=${clip.volume.coerceIn(0f, 1f)}[$label]"
+            parts += audioFilterChain(
+                input = input,
+                sourceStartMs = clip.startMs,
+                durationMs = (clip.endMs - clip.startMs).coerceAtLeast(0L),
+                timelineStartMs = clip.timelineStartMs,
+                volume = clip.volume,
+                fadeInMs = clip.fadeInMs,
+                fadeOutMs = clip.fadeOutMs,
+                label = label,
+            )
             audioInputs += "[$label]"
         }
         if (audioInputs.isEmpty()) {
@@ -98,6 +113,37 @@ object FfmpegTimelineCommandBuilder {
         }
 
         return parts.joinToString(";")
+    }
+
+    /**
+     * Applies trims and clip-relative fades before placing audio on the project timeline.
+     * Fade durations are bounded to the audible clip length so malformed project values cannot
+     * produce negative fade starts or ask FFmpeg to fade beyond the clip.
+     */
+    private fun audioFilterChain(
+        input: Int,
+        sourceStartMs: Long,
+        durationMs: Long,
+        timelineStartMs: Long,
+        volume: Float,
+        fadeInMs: Long = 0L,
+        fadeOutMs: Long = 0L,
+        label: String,
+    ): String {
+        val duration = durationMs.coerceAtLeast(0L)
+        val filters = mutableListOf(
+            "atrim=start=${seconds(sourceStartMs)}:duration=${seconds(duration)}",
+            "asetpts=PTS-STARTPTS",
+        )
+        val fadeIn = fadeInMs.coerceIn(0L, duration)
+        if (fadeIn > 0L) filters += "afade=t=in:st=0:d=${seconds(fadeIn)}"
+        val fadeOut = fadeOutMs.coerceIn(0L, duration)
+        if (fadeOut > 0L) {
+            filters += "afade=t=out:st=${seconds(duration - fadeOut)}:d=${seconds(fadeOut)}"
+        }
+        filters += "volume=${volume.coerceIn(0f, 2f)}"
+        filters += "adelay=${timelineStartMs.coerceAtLeast(0L)}:all=1"
+        return "[$input:a]${filters.joinToString(",")}[$label]"
     }
 
     private fun ffmpegBlend(mode: BlendMode): String = when (mode) {
