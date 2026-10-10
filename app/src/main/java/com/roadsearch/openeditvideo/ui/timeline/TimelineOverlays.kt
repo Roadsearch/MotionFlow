@@ -158,7 +158,6 @@ internal fun ClipCapsules(state: EditorUiState, clip: VideoClip?, vm: EditorView
                     if (overlay) {
                         CapsuleButton("Étirer jusqu'à la fin", enabled = canStretchEnd, onClick = { vm.stretchToEnd() }) { StretchIcon(false, tint(canStretchEnd)) }
                     }
-                    CapsuleButton("Supprimer", onClick = { vm.deleteSelected() }) { Icon(Icons.Rounded.DeleteOutline, null, tint = Color(0xFFFF8A8A)) }
                 }
             }
         }

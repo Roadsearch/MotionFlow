@@ -143,7 +143,7 @@ internal fun InteractiveTimeline(state: EditorUiState, vm: EditorViewModel, acti
         Box(Modifier.fillMaxWidth().onSizeChanged { viewportPx = it.width }) {
             Box(Modifier.fillMaxWidth().horizontalScroll(scroll)) {
                 Column(Modifier.width(totalWidth)) {
-                    LaneRow(lead, LaneHeights.Ruler) { TimelineRuler(duration, scale, laneWidth) }
+                    LaneRow(lead, LaneHeights.Ruler) { TimelineRuler(duration, scale, laneWidth, playheadMs = state.positionMs) }
                     if (state.markers.isNotEmpty()) {
                         LaneRow(lead, LaneHeights.Markers) {
                             MarkerLane(state.markers, scale, laneWidth, onSeek = { vm.seekTo(it) }, onRemove = { vm.removeMarker(it) })

@@ -328,15 +328,19 @@ class EditorViewModel @Inject constructor(
         val state = _state.value
         val clip = state.clips.firstOrNull { it.id == id } ?: return
         if (isTrackLocked(clip.track)) return
-        if (!gestureOpen) record()
         val moved = TimelineMath.move(
             clip = clip,
             deltaMs = deltaMs,
             others = state.clips.filter { it.id != id && it.track == clip.track },
             fallbackDurationMs = state.durationMs,
         )
+        val applied = moved.timelineStartMs - clip.timelineStartMs
+        val groupId = clip.groupId
+        // A grouped clip stays put when one of its followers would land on another clip of its own track.
+        if (groupId != null && !TimelineOps.followersCanShift(state, groupId, applied, id, state.trackStates.filterValues { it.locked }.keys)) return
+        if (!gestureOpen) record()
         _state.update { it.copy(clips = it.clips.map { item -> if (item.id == id) moved else item }) }
-        propagateGroupMove(clip.groupId, moved.timelineStartMs - clip.timelineStartMs, skipClipId = id)
+        propagateGroupMove(groupId, applied, skipClipId = id)
     }
 
     fun updateClip(clip: VideoClip) {

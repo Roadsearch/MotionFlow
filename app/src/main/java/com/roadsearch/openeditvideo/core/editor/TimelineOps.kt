@@ -149,6 +149,28 @@ object TimelineOps {
     }
 
     /**
+     * False when moving the followers of [groupId] by [deltaMs] would land a video clip on a clip that is not part of
+     * the move (same track, overlapping in time). Audio and text may overlap freely, so they never block a move.
+     */
+    fun followersCanShift(
+        state: EditorUiState,
+        groupId: Long,
+        deltaMs: Long,
+        skipClipId: Long? = null,
+        lockedTracks: Set<Int> = emptySet(),
+    ): Boolean {
+        if (deltaMs == 0L) return true
+        val moving = state.clips.filter { it.groupId == groupId && it.track !in lockedTracks }
+        val movingIds = moving.map { it.id }.toSet() + listOfNotNull(skipClipId)
+        fun length(c: VideoClip) = TimelineMath.duration(c, c.sourceDurationMs.coerceAtLeast(state.durationMs))
+        return moving.filter { it.id != skipClipId }.all { f ->
+            val start = (f.timelineStartMs + deltaMs).coerceAtLeast(0L)
+            val end = start + length(f)
+            state.clips.none { o -> o.id !in movingIds && o.track == f.track && o.timelineStartMs < end && start < o.timelineStartMs + length(o) }
+        }
+    }
+
+    /**
      * Moves every follower of [groupId] by [deltaMs] (never before 0; clips on [lockedTracks] stay put). The element
      * the user is dragging is skipped: the caller has already moved it.
      */

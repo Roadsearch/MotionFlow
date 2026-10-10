@@ -30,7 +30,7 @@ import com.roadsearch.openeditvideo.ui.theme.MfColors
 
 /** Canvas-drawn ruler: one draw call instead of one composable per second, so long timelines stay at 60 FPS. */
 @Composable
-internal fun TimelineRuler(durationMs: Long, scale: TimelineScale, width: Dp, modifier: Modifier = Modifier) {
+internal fun TimelineRuler(durationMs: Long, scale: TimelineScale, width: Dp, playheadMs: Long = -1L, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     val style = remember { TextStyle(color = MfColors.TextMuted, fontSize = 10.sp, fontFamily = Inter) }
     val stepSec = remember(scale) {
@@ -50,10 +50,14 @@ internal fun TimelineRuler(durationMs: Long, scale: TimelineScale, width: Dp, mo
                 t += minorSec
             }
         }
+        val playheadX = playheadMs / 1000f * pxPerSec
         labels.forEachIndexed { i, layout ->
             val x = i * stepSec * pxPerSec
             drawLine(MfColors.TextMuted.copy(alpha = .75f), Offset(x, size.height - 9.dp.toPx()), Offset(x, size.height), 1.dp.toPx())
-            drawText(layout, topLeft = Offset(x + 3.dp.toPx(), 1.dp.toPx()))
+            // The playhead dot sits on the ruler: a label right under it would be unreadable, so it is skipped.
+            val labelCenter = x + 3.dp.toPx() + layout.size.width / 2f
+            val underPlayhead = playheadMs >= 0L && kotlin.math.abs(labelCenter - playheadX) < layout.size.width / 2f + 14.dp.toPx()
+            if (!underPlayhead) drawText(layout, topLeft = Offset(x + 3.dp.toPx(), 1.dp.toPx()))
         }
     }
 }

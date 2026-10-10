@@ -155,6 +155,10 @@ class MultiTrackCompositionFactory(private val context: Context) {
             setSpan(ForegroundColorSpan(st.colorArgb), 0, length, flag)
             setSpan(AbsoluteSizeSpan(st.size.toInt().coerceIn(12, 220)), 0, length, flag)
             setSpan(TypefaceSpan(face), 0, length, flag)
+            if (TextShadow.appliesTo(st.preset)) {
+                val size = st.size.coerceIn(12f, 220f)
+                setSpan(TextShadowSpan(TextShadow.radius(size), TextShadow.offsetY(size), TextShadow.COLOR), 0, length, flag)
+            }
         }
     }
 

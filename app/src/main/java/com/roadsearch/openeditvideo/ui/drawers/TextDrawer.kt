@@ -1,6 +1,7 @@
 package com.roadsearch.openeditvideo.ui.drawers
 
 import androidx.compose.foundation.background
+import com.roadsearch.openeditvideo.media.TextShadow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -92,7 +93,7 @@ internal fun previewStyle(style: TextStyleSpec, sizeSp: Float): TextStyle = Text
     shadow = when (style.preset) {
         TextPreset.NEON -> Shadow(Color(style.colorArgb), Offset.Zero, 24f)
         TextPreset.BOLD3D -> Shadow(Color(0xFF6A4DEB), Offset(4f, 4f), 0f)
-        else -> null
+        else -> Shadow(Color(TextShadow.COLOR), Offset(0f, TextShadow.offsetY(sizeSp)), TextShadow.radius(sizeSp))
     },
 )
 
