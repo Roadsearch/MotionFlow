@@ -20,7 +20,8 @@ class AudioFadeCurveTest {
         assertEquals(0f, AudioFadeCurve.gainAt(10_000, 1_000, 10_000, 1f, 0, 2_000), .0001f)
     }
 
-    @Test fun overlappingFadesNeverExceedClipVolume() {
-        assertEquals(.25f, AudioFadeCurve.gainAt(5_000, 1_000, 10_000, .5f, 8_000, 8_000), .0001f)
+    @Test fun overlappingFadesUseTheLowerEnvelopeAndNeverExceedClipVolume() {
+        // At 5s, both 8s ramps are at 5/8; the lower envelope is 0.625 * 0.5 volume.
+        assertEquals(.3125f, AudioFadeCurve.gainAt(5_000, 1_000, 10_000, .5f, 8_000, 8_000), .0001f)
     }
 }
