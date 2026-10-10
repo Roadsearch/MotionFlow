@@ -2,6 +2,7 @@ package com.roadsearch.openeditvideo.ui.drawers
 
 import androidx.compose.foundation.background
 import com.roadsearch.openeditvideo.core.TimelineValidator
+import com.roadsearch.openeditvideo.export.ExportCapabilityAnalyzer
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -118,8 +119,13 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
     val canExport = first != null
     val blockingTransitions = state.transitions.count { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }
     val hasBlend = state.blendModes.any { it.value != BlendMode.NORMAL }
+    val capabilityErrors = remember(state) { ExportCapabilityAnalyzer.errors(state) }
+    // Wipes already have a dedicated, actionable warning below.
+    val otherCapabilityErrors = remember(capabilityErrors) {
+        capabilityErrors.filterNot { it.contains("type volet (wipe)") }
+    }
     val textClashes = remember(state.textOverlays) { TimelineValidator.textOverlaps(state).size }
-    val canRun = canExport && blockingTransitions == 0
+    val canRun = canExport && capabilityErrors.isEmpty()
     val context = LocalContext.current
     val resolutions = ExportResolution.entries
 
@@ -177,8 +183,24 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
                 )
             }
             Spacer(Modifier.height(10.dp))
-        } else if (hasBlend) {
-            Caption("Modes de fusion actifs : l'export peut échouer si le moteur FFmpeg optionnel n'est pas installé.")
+        }
+        if (otherCapabilityErrors.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x22FF5C7A)).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text("Corrigez ces problèmes avant l’export :", color = MfColors.Danger, style = MaterialTheme.typography.labelLarge)
+                otherCapabilityErrors.take(3).forEach { issue ->
+                    Text("• $issue", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                }
+                if (otherCapabilityErrors.size > 3) {
+                    Text("Et ${otherCapabilityErrors.size - 3} autre(s) problème(s).", color = MfColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        } else if (blockingTransitions == 0 && hasBlend) {
+            Caption("Modes de fusion actifs : vérifiez que les clips utilisent une combinaison prise en charge par le moteur.")
             Spacer(Modifier.height(6.dp))
         }
         if (textClashes > 0) {
