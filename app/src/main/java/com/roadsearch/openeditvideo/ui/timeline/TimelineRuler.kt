@@ -30,7 +30,7 @@ import com.roadsearch.openeditvideo.ui.theme.MfColors
 
 /** Canvas-drawn ruler: one draw call instead of one composable per second, so long timelines stay at 60 FPS. */
 @Composable
-internal fun TimelineRuler(durationMs: Long, scale: TimelineScale, width: Dp, playheadMs: Long = -1L, modifier: Modifier = Modifier) {
+internal fun TimelineRuler(durationMs: Long, scale: TimelineScale, width: Dp, modifier: Modifier = Modifier, playheadMs: Long = -1L) {
     val measurer = rememberTextMeasurer()
     val style = remember { TextStyle(color = MfColors.TextMuted, fontSize = 10.sp, fontFamily = Inter) }
     val stepSec = remember(scale) {

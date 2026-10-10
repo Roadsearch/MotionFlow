@@ -12,6 +12,7 @@ import kotlin.math.max
  * so the same keyframe curve can drive ExoPlayer and Transformer.
  * Coordinates are expressed in the editor's 1080x1920 design space and mapped to NDC.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AnimatedTransformEffect(
     private val animation: TransformAnimation,
     private val sourceStartMs: Long = 0L,
