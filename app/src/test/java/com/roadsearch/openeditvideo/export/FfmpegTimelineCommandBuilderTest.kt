@@ -31,7 +31,7 @@ class FfmpegTimelineCommandBuilderTest {
             .args.let { args -> args[args.indexOf("-filter_complex") + 1] }
 
         assertTrue(graph.contains("[1:a]atrim=start=2.000000:duration=3.000000,asetpts=PTS-STARTPTS"))
-        assertTrue(graph.contains("volume='1.5*max(0,min(1,min((t/1.000000),((3.000000-t)/1.000000))))'"))
+        assertTrue(graph.contains("volume='1.5*max(0,min(min(1,(t/1.000000)),((3.000000-t)/1.000000)))'"))
         assertTrue(graph.contains("adelay=4000:all=1"))
     }
 
