@@ -1,6 +1,7 @@
 package com.roadsearch.openeditvideo.export
 
 import android.net.Uri
+import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.Transition
 import com.roadsearch.openeditvideo.model.TransitionType
@@ -27,6 +28,22 @@ class ExportCapabilityAnalyzerTest {
     @Test fun allowsAGapInTheMainTrackRenderedAsBlack() {
         val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(clip(1, 0), clip(2, 2_000))))
         assertTrue(errors.isEmpty())
+    }
+
+    private fun transitionState(type: TransitionType, withBlend: Boolean = false) = EditorUiState(
+        clips = listOf(clip(1, 0), clip(2, 1_000)),
+        transitions = listOf(Transition(1, 1, 2, 500, type)),
+        blendModes = if (withBlend) mapOf(1L to BlendMode.MULTIPLY) else emptyMap(),
+    )
+
+    @Test fun rejectsWipeTransitionsAtCapabilityGate() {
+        val errors = ExportCapabilityAnalyzer.errors(transitionState(TransitionType.WIPE_LEFT))
+        assertTrue(errors.any { it.contains("wipe") })
+    }
+
+    @Test fun rejectsFadeTransitionsCombinedWithAdvancedBlendModes() {
+        val errors = ExportCapabilityAnalyzer.errors(transitionState(TransitionType.CROSS_FADE, withBlend = true))
+        assertTrue(errors.any { it.contains("mode de fusion") })
     }
 
     @Test fun allowsMedia3FadeTransitionsThroughCapabilityGate() {

@@ -92,7 +92,14 @@ class EditorViewModel @Inject constructor(
                 // always tags the restored state with the new id.
                 hydrated = false
                 undoStack.clear(); redoStack.clear()
-                _state.value = runCatching { TimelineValidator.repair(EditorStateCodec.decode(entity.documentJson)) }.getOrNull() ?: EditorUiState()
+                _state.value = runCatching { TimelineValidator.repair(EditorStateCodec.decode(entity.documentJson)) }.fold(
+                    onSuccess = { it },
+                    onFailure = { error ->
+                        // Never turn a decode failure into an empty project that autosave could overwrite.
+                        val reason = "Projet illisible, il n'est pas modifié : ${error.message ?: "format inconnu"}"
+                        EditorUiState(loadError = reason, exportMessage = reason)
+                    },
+                )
                 hydratedId = entity.id
                 hydrated = true
                 pendingImport?.let { (uri, name, aspect) ->
@@ -110,7 +117,7 @@ class EditorViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .debounce(650L)
                 .collectLatest { (json, id) ->
-                    if (hydrated && id != null) repository.saveJson(json, id)
+                    if (hydrated && id != null && _state.value.loadError == null) repository.saveJson(json, id)
                 }
         }
 
@@ -198,6 +205,7 @@ class EditorViewModel @Inject constructor(
 
     /** Writes the current state immediately (call before leaving the editor; the debounced save may still be pending). */
     fun flushSave() {
+        if (_state.value.loadError != null) return
         val id = hydratedId ?: return
         val json = EditorStateCodec.encode(_state.value)
         viewModelScope.launch { repository.saveJson(json, id) }

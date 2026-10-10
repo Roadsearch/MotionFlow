@@ -139,6 +139,8 @@ data class EditorUiState(
     val effects: EffectSettings = EffectSettings(),
     val exportProgress: Float? = null,
     val exportMessage: String? = null,
+    /** Runtime-only warning: protects an unreadable project from being overwritten by autosave. */
+    @kotlinx.serialization.Transient val loadError: String? = null,
     val seekNonce: Long = 0L,
     val transitions: List<Transition> = emptyList(),
     val easing: Easing = Easing.LINEAR,

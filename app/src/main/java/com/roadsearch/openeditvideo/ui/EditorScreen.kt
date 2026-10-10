@@ -107,7 +107,7 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
         TransportBar(state, vm, onFullscreen = { fullscreen = true })
         Timeline(state, vm, TimelineActions(onImport = { pickVideo() }, onAddMusic = { drawer = Drawer.AUDIO }, onAddText = { vm.clearSelection(); drawer = Drawer.TEXT_NEW }, onCover = { drawer = Drawer.COVER }, onTransition = { f, t -> transitionPair = f to t; drawer = Drawer.TRANSITION }))
         if (state.exportProgress != null || state.exportMessage != null) {
-            ExportBanner(state.exportProgress, state.exportMessage, vm)
+            ExportBanner(state.exportProgress, state.loadError ?: state.exportMessage, vm)
         }
         ContextToolbar(state, vm, TabActions(
             pickVideo = { pickVideo() }, pickAudio = { pickAudio() }, pickOverlay = { pickOverlay() },

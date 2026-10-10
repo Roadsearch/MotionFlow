@@ -3,6 +3,7 @@ package com.roadsearch.openeditvideo.export
 import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
+import com.roadsearch.openeditvideo.model.TransitionType
 import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.scene.SceneGraph
 
@@ -24,6 +25,14 @@ object ExportCapabilityAnalyzer {
         }
         addAll(SceneGraph.validationErrors(state.clips, state.nullObjects, state.textOverlays))
         // Fade-through and cross-fade are represented by opacity ramps in the Media3 composition.
-        // Unsupported wipes and combinations are rejected by AdvancedRenderPlanner at export time.
+        // Keep this capability gate aligned with AdvancedRenderPlanner; never silently export unsupported transitions.
+        val active = state.transitions.filter { it.type != TransitionType.CUT }
+        if (active.any { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }) {
+            add("Les transitions de type volet (wipe) ne sont pas encore rendues à l'export : remplacez-les par un fondu ou une coupe.")
+        }
+        if (active.any { it.type == TransitionType.CROSS_FADE || it.type == TransitionType.FADE_THROUGH } &&
+            state.blendModes.any { it.value != BlendMode.NORMAL }) {
+            add("Les fondus enchaînés ne sont pas encore combinables avec un mode de fusion avancé.")
+        }
     }
 }
