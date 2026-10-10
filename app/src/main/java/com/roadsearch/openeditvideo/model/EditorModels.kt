@@ -132,6 +132,19 @@ enum class Tool(val label: String) {
 fun EditorUiState.selectedClip(): VideoClip? = clips.firstOrNull { it.id == selectedClipId }
 fun VideoClip.end(durationMs: Long): Long = if (endMs > startMs) endMs else sourceDurationMs.takeIf { it > startMs } ?: durationMs
 
+/** Resolves modern per-property tracks, falling back to legacy all-properties keyframes where needed. */
+fun VideoClip.effectiveAnimation(): TransformAnimation {
+    fun legacy(selector: (Keyframe) -> Float): List<AnimatedKeyframe> =
+        keyframes.map { frame -> AnimatedKeyframe(frame.timeMs, selector(frame)) }.sortedBy { it.timeMs }
+
+    return animation.copy(
+        x = animation.x.ifEmpty { legacy { it.x } },
+        y = animation.y.ifEmpty { legacy { it.y } },
+        scale = animation.scale.ifEmpty { legacy { it.scale } },
+        rotation = animation.rotation.ifEmpty { legacy { it.rotation } },
+        opacity = animation.opacity.ifEmpty { legacy { it.opacity } },
+    )
+}
 
 fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
     if (isEmpty()) return Keyframe(timeMs)
@@ -142,11 +155,11 @@ fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
     val left = sorted.last { it.timeMs <= timeMs }
     if (right.timeMs == left.timeMs) return left
     val t = (timeMs - left.timeMs).toFloat() / (right.timeMs - left.timeMs).toFloat()
-    fun lerp(a: Float,b: Float)=a+(b-a)*t
-    return Keyframe(timeMs, lerp(left.x,right.x), lerp(left.y,right.y), lerp(left.scale,right.scale), lerp(left.rotation,right.rotation), lerp(left.opacity,right.opacity))
+    fun lerp(a: Float, b: Float) = a + (b - a) * t
+    return Keyframe(timeMs, lerp(left.x, right.x), lerp(left.y, right.y), lerp(left.scale, right.scale), lerp(left.rotation, right.rotation), lerp(left.opacity, right.opacity))
 }
 
 fun VideoClip.keyframesAt(timelinePositionMs: Long): Keyframe {
     val local = (timelinePositionMs - timelineStartMs + startMs).coerceAtLeast(startMs)
-    return if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() || animation.opacity.isNotEmpty()) animation.at(local) else keyframes.interpolate(local)
+    return effectiveAnimation().at(local)
 }
