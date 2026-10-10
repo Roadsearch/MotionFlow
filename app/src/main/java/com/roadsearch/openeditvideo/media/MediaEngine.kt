@@ -25,6 +25,7 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.ChromaKeySettings
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.VideoClip
+import com.roadsearch.openeditvideo.model.effectiveAnimation
 import com.roadsearch.openeditvideo.model.VideoFilter
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
