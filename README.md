@@ -22,7 +22,7 @@
 - Marqueurs de timeline persistants (ajout, navigation, suppression).
 - Aimantation du curseur sur les marqueurs (toggle « Aimant »).
 - Pistes verrouillables / muettes / masquables, prises en compte à l'export.
-- Workflow CI prêt dans \`ci/android-ci.yml\` (à copier dans \`.github/workflows/\`).
+- Workflow CI prêt dans `ci/android-ci.yml` (à copier dans `.github/workflows/`).
 ## Build
 ```bash
 # Générer le wrapper une fois (Gradle >= 9.4 installé localement) :
