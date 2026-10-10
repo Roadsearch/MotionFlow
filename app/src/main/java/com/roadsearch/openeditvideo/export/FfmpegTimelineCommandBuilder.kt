@@ -147,7 +147,7 @@ object FfmpegTimelineCommandBuilder {
         filters += if (envelopeFactors.size == 1) {
             "volume=$gain"
         } else {
-            "volume='$gain*max(0,$envelope)'"
+            "volume='$gain*max(0,$envelope)':eval=frame"
         }
         filters += "adelay=${timelineStartMs.coerceAtLeast(0L)}:all=1"
         return "[$input:a]${filters.joinToString(",")}[$label]"
