@@ -68,6 +68,6 @@ class AnimationTest {
         assertEquals(2, animation.keyframes(AnimatedProperty.X).size)
         assertEquals(2, animation.keyframes(AnimatedProperty.SCALE).size)
         assertTrue(animation.keyframes(AnimatedProperty.OPACITY).isEmpty())
-        assertEquals(4, animation.withKeyframes(AnimatedProperty.OPACITY, listOf(AnimatedKeyframe(0L, 1f))).opacity.size)
+        assertEquals(1, animation.withKeyframes(AnimatedProperty.OPACITY, listOf(AnimatedKeyframe(0L, 1f))).opacity.size)
     }
 }
