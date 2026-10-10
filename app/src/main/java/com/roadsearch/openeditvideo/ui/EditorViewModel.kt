@@ -592,6 +592,7 @@ class EditorViewModel @Inject constructor(
         val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
             .coerceIn(clip.startMs, clip.end(state.durationMs))
         val current = clip.keyframesAt(state.positionMs)
+        val baseAnimation = clip.effectiveAnimation()
         val addAllProperties = x == null && y == null && scale == null && rotation == null && opacity == null
         record()
 
@@ -600,17 +601,17 @@ class EditorViewModel @Inject constructor(
             return (list.filterNot { it.timeMs == local } + key).sortedBy { it.timeMs }
         }
 
-        val animation = clip.animation.copy(
-            x = if (addAllProperties || x != null) put(clip.animation.x, x ?: current.x) else clip.animation.x,
-            y = if (addAllProperties || y != null) put(clip.animation.y, y ?: current.y) else clip.animation.y,
-            scale = if (addAllProperties || scale != null) put(clip.animation.scale, scale ?: current.scale) else clip.animation.scale,
-            rotation = if (addAllProperties || rotation != null) put(clip.animation.rotation, rotation ?: current.rotation) else clip.animation.rotation,
-            opacity = if (addAllProperties || opacity != null) put(clip.animation.opacity, opacity ?: current.opacity) else clip.animation.opacity,
+        val animation = baseAnimation.copy(
+            x = if (addAllProperties || x != null) put(baseAnimation.x, x ?: current.x) else baseAnimation.x,
+            y = if (addAllProperties || y != null) put(baseAnimation.y, y ?: current.y) else baseAnimation.y,
+            scale = if (addAllProperties || scale != null) put(baseAnimation.scale, scale ?: current.scale) else baseAnimation.scale,
+            rotation = if (addAllProperties || rotation != null) put(baseAnimation.rotation, rotation ?: current.rotation) else baseAnimation.rotation,
+            opacity = if (addAllProperties || opacity != null) put(baseAnimation.opacity, opacity ?: current.opacity) else baseAnimation.opacity,
         )
 
         _state.update { root ->
             root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = animation) else item
+                if (item.id == clip.id) item.copy(animation = animation, keyframes = emptyList()) else item
             })
         }
     }
@@ -625,9 +626,9 @@ class EditorViewModel @Inject constructor(
         curveX2: Float,
         curveY2: Float,
     ) {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return
-        val keys = clip.animation.keyframes(property)
+        val clip = _state.value.selectedClip() ?: return
+        val baseAnimation = clip.effectiveAnimation()
+        val keys = baseAnimation.keyframes(property)
         if (keys.none { it.timeMs == keyframeTimeMs }) return
         record()
         val updatedKeys = keys.map { key ->
@@ -641,7 +642,9 @@ class EditorViewModel @Inject constructor(
         }
         _state.update { root ->
             root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = item.animation.withKeyframes(property, updatedKeys)) else item
+                if (item.id == clip.id) {
+                    item.copy(animation = item.effectiveAnimation().withKeyframes(property, updatedKeys), keyframes = emptyList())
+                } else item
             })
         }
     }
@@ -652,7 +655,7 @@ class EditorViewModel @Inject constructor(
         val clip = state.selectedClip() ?: return
         val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
             .coerceIn(clip.startMs, clip.end(state.durationMs))
-        val keys = clip.animation.keyframes(property).sortedBy { it.timeMs }
+        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
         val start = keys.lastOrNull { it.timeMs <= local } ?: keys.firstOrNull() ?: return
         updateKeyframeCurve(
             property = property,
@@ -673,8 +676,8 @@ class EditorViewModel @Inject constructor(
         val state = _state.value
         val clip = state.selectedClip() ?: return
         val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        val keys = clip.animation.keyframes(property).sortedBy { it.timeMs }
-        val target = if (forward) keys.firstOrNull { it.timeMs > local } else keys.lastOrNull { it.timeMs < local }
+        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
+        val target = (if (forward) keys.firstOrNull { it.timeMs > local } else keys.lastOrNull { it.timeMs < local })
             ?: return
         val position = (clip.timelineStartMs + target.timeMs - clip.startMs).coerceAtLeast(clip.timelineStartMs)
         _state.update { it.copy(positionMs = position, playing = false, seekNonce = it.seekNonce + 1) }
@@ -684,26 +687,33 @@ class EditorViewModel @Inject constructor(
         val state = _state.value
         val clip = state.selectedClip() ?: return
         val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        val has = listOf(clip.animation.x, clip.animation.y, clip.animation.scale, clip.animation.rotation, clip.animation.opacity)
+        val animation = clip.effectiveAnimation()
+        val has = listOf(animation.x, animation.y, animation.scale, animation.rotation, animation.opacity)
             .any { values -> values.any { it.timeMs == local } }
         if (!has) return
         record()
-        _state.update {
-            it.copy(clips = it.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = item.animation.copy(
-                    x = item.animation.x.filterNot { it.timeMs == local },
-                    y = item.animation.y.filterNot { it.timeMs == local },
-                    scale = item.animation.scale.filterNot { it.timeMs == local },
-                    rotation = item.animation.rotation.filterNot { it.timeMs == local },
-                    opacity = item.animation.opacity.filterNot { it.timeMs == local },
-                )) else item
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id == clip.id) {
+                    val effective = item.effectiveAnimation()
+                    item.copy(
+                        animation = effective.copy(
+                            x = effective.x.filterNot { it.timeMs == local },
+                            y = effective.y.filterNot { it.timeMs == local },
+                            scale = effective.scale.filterNot { it.timeMs == local },
+                            rotation = effective.rotation.filterNot { it.timeMs == local },
+                            opacity = effective.opacity.filterNot { it.timeMs == local },
+                        ),
+                        keyframes = emptyList(),
+                    )
+                } else item
             })
         }
     }
 
     fun clearKeyframes() {
         val clip = _state.value.selectedClip() ?: return
-        if (clip.animation == TransformAnimation()) return
+        if (clip.animation == TransformAnimation() && clip.keyframes.isEmpty()) return
         record()
         _state.update {
             it.copy(clips = it.clips.map { item ->
