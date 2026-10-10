@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.roadsearch.openeditvideo.media.MediaProbe
 import com.roadsearch.openeditvideo.model.AudioClip
+import com.roadsearch.openeditvideo.model.STILL_SOURCE_MS
 import com.roadsearch.openeditvideo.model.VideoClip
 
 /** Performs cheap, user-facing validation before an expensive Transformer job starts. */
@@ -20,8 +21,10 @@ object MediaSourceValidator {
         val warnings = mutableListOf<String>()
         if (clips.none { it.track == 0 }) errors += "Ajoutez au moins un clip sur V1."
 
-        clips.filter { it.track == 0 }.forEach { clip ->
+        clips.forEach { clip ->
             validateUri(context, clip.uri, clip.name, errors)
+            // Photos and generated backgrounds have no source duration to check.
+            if (clip.sourceDurationMs >= STILL_SOURCE_MS) return@forEach
             val sourceDuration = MediaProbe.durationMsOrNull(context, clip.uri)
             if (sourceDuration == null) {
                 errors += "Durée source indéterminée : ${clip.name}"
@@ -36,9 +39,6 @@ object MediaSourceValidator {
         }
         audio.forEach { item -> validateUri(context, item.uri, item.name, errors) }
         
-        clips.filter { it.track > 0 }.takeIf { it.isNotEmpty() }?.let {
-            errors += "Les pistes vidéo V2+ nécessitent encore le compositeur multi-input de production. Aucun calque vidéo ne sera ignoré silencieusement."
-        }
         return Report(errors.distinct(), warnings.distinct())
     }
 
