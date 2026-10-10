@@ -25,7 +25,10 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.ChromaKeySettings
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.VideoClip
+import com.roadsearch.openeditvideo.model.effectiveAnimation
 import com.roadsearch.openeditvideo.model.VideoFilter
+import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.scene.SceneGraph
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -60,12 +63,28 @@ class MediaEngine(private val context: Context) {
 
     fun previewEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
         addAll(effects(clip.effects))
-        val animation = clip.animation
-        if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
-            add(AnimatedTransformEffect(animation, clip.startMs))
+        val animation = clip.effectiveAnimation()
+        val parents = SceneGraph.ancestors(clip.parentId, state.nullObjects)
+        val localTransformAnimated = animation.x.isNotEmpty() || animation.y.isNotEmpty() ||
+            animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() ||
+            clip.keyframes.any { it.x != 0f || it.y != 0f || it.scale != 1f || it.rotation != 0f }
+        val parentTransformAnimated = parents.any { parent ->
+            val parentAnimation = parent.animation
+            parentAnimation.x.isNotEmpty() || parentAnimation.y.isNotEmpty() ||
+                parentAnimation.scale.isNotEmpty() || parentAnimation.rotation.isNotEmpty()
         }
-        if (animation.opacity.isNotEmpty()) {
-            add(AnimatedAlphaEffect(animation.opacity, clip.startMs))
+        if (localTransformAnimated || parentTransformAnimated) {
+            add(AnimatedTransformEffect(animation, clip.startMs, resolvedTransformAt = { sourceTimeMs ->
+                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
+                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs)
+            }))
+        }
+        val localOpacityAnimated = animation.opacity.isNotEmpty() || clip.keyframes.any { it.opacity != 1f }
+        if (localOpacityAnimated || parents.any { it.animation.opacity.isNotEmpty() }) {
+            add(AnimatedAlphaEffect(animation.opacity, clip.startMs, resolvedOpacityAt = { sourceTimeMs ->
+                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
+                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs).opacity
+            }))
         }
 
         val chroma = state.chromaKeys[clip.id]
@@ -96,8 +115,14 @@ class MediaEngine(private val context: Context) {
         Effects(listOf(constantGainProcessor(clip.volume.coerceIn(0f, 2f))), buildCompositionEffects(state, clip))
 
     private fun buildCompositionEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
-        val static = clip.effects.copy(rotation = 0f)
-        addAll(GpuEffectFactory.build(static))
+        addAll(GpuEffectFactory.build(clip.effects))
+        val animation = clip.effectiveAnimation()
+        if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
+            add(AnimatedTransformEffect(animation, clip.startMs))
+        }
+        if (animation.opacity.isNotEmpty()) {
+            add(AnimatedAlphaEffect(animation.opacity, clip.startMs))
+        }
         val chroma = state.chromaKeys[clip.id]
         if (chroma?.enabled == true) add(chromaEffect(chroma))
         val mask = state.masks[clip.id]
@@ -133,6 +158,7 @@ class MediaEngine(private val context: Context) {
     suspend fun exportCompositionSuspend(
         state: EditorUiState,
         output: java.io.File,
+        settings: com.roadsearch.openeditvideo.export.ExportSettings = com.roadsearch.openeditvideo.export.ExportSettings(),
         onProgress: (Float) -> Unit = {},
     ) = suspendCancellableCoroutine<Unit> { continuation ->
         val mainHandler = Handler(Looper.getMainLooper())
@@ -170,10 +196,17 @@ class MediaEngine(private val context: Context) {
 
         mainHandler.post {
             try {
-                val composition = MultiTrackCompositionFactory(context).build(state)
+                val composition = MultiTrackCompositionFactory(context).build(state, settings)
                 transformer = Transformer.Builder(context)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setAudioMimeType(MimeTypes.AUDIO_AAC)
+                    .setEncoderFactory(
+                        androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
+                            .setRequestedVideoEncoderSettings(
+                                androidx.media3.transformer.VideoEncoderSettings.Builder().setBitrate(settings.bitrateFor(state.aspect)).build(),
+                            )
+                            .build(),
+                    )
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, result: ExportResult) {
                             if (!continuation.isCompleted) {

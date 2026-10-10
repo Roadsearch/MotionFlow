@@ -18,6 +18,9 @@ data class VideoClip(
     val keyframes: List<Keyframe> = emptyList(),
     val animation: TransformAnimation = TransformAnimation(),
     val effects: EffectSettings = EffectSettings(),
+    val parentId: Long? = null,
+    /** Elements sharing a group id move together (linked audio/video/text). Null = not linked. */
+    val groupId: Long? = null,
 )
 
 @Serializable
@@ -30,6 +33,7 @@ data class AudioClip(
     val sourceDurationMs: Long = 0L,
     val volume: Float = 1f,
     val timelineStartMs: Long = 0L,
+    val groupId: Long? = null,
 )
 
 @Serializable
@@ -38,6 +42,23 @@ data class TextOverlay(
     val text: String,
     val startMs: Long,
     val endMs: Long,
+    val style: TextStyleSpec = TextStyleSpec(),
+    val parentId: Long? = null,
+    val animation: TransformAnimation = TransformAnimation(),
+    val groupId: Long? = null,
+)
+
+@Serializable
+enum class TextPreset { CLASSIC, NEON, SCRIPT, BOLD3D }
+
+/** Visual style of a text overlay. [font]: bebas | inter | sans | serif | cursive. [size] in px of the rendered overlay; [posY] -1 (bottom) .. 1 (top). */
+@Serializable
+data class TextStyleSpec(
+    val preset: TextPreset = TextPreset.CLASSIC,
+    val font: String = "sans",
+    val colorArgb: Int = 0xFFFFFFFF.toInt(),
+    val size: Float = 64f,
+    val posY: Float = 0f,
 )
 
 @Serializable
@@ -66,10 +87,11 @@ data class MaskSettings(
     val y: Float = 0f,
     val width: Float = 1f,
     val height: Float = 1f,
+    val invert: Boolean = false,
 )
 
 @Serializable
-enum class MaskType { RECTANGLE, CIRCLE, LINEAR_GRADIENT, RADIAL_GRADIENT }
+enum class MaskType { RECTANGLE, CIRCLE, LINEAR_GRADIENT, RADIAL_GRADIENT, ELLIPSE }
 
 @Serializable
 data class ChromaKeySettings(
@@ -104,6 +126,10 @@ data class EditorUiState(
     val textOverlays: List<TextOverlay> = emptyList(),
     val selectedClipId: Long? = null,
     val selectedClipIds: Set<Long> = emptySet(),
+    val selectedAudioId: Long? = null,
+    val aspect: AspectRatio = AspectRatio.PORTRAIT,
+    val coverMs: Long = 0L,
+    val selectedTextId: Long? = null,
     val playing: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
@@ -113,6 +139,8 @@ data class EditorUiState(
     val effects: EffectSettings = EffectSettings(),
     val exportProgress: Float? = null,
     val exportMessage: String? = null,
+    /** Runtime-only warning: protects an unreadable project from being overwritten by autosave. */
+    @kotlinx.serialization.Transient val loadError: String? = null,
     val seekNonce: Long = 0L,
     val transitions: List<Transition> = emptyList(),
     val easing: Easing = Easing.LINEAR,
@@ -122,6 +150,7 @@ data class EditorUiState(
     val markers: List<Marker> = emptyList(),
     val snappingEnabled: Boolean = true,
     val trackStates: Map<Int, TrackState> = emptyMap(),
+    val nullObjects: List<NullObject> = emptyList(),
 )
 
 @Serializable
@@ -131,6 +160,36 @@ enum class Tool(val label: String) {
 
 fun EditorUiState.selectedClip(): VideoClip? = clips.firstOrNull { it.id == selectedClipId }
 fun VideoClip.end(durationMs: Long): Long = if (endMs > startMs) endMs else sourceDurationMs.takeIf { it > startMs } ?: durationMs
+
+/** Resolves modern per-property tracks, falling back to legacy all-properties keyframes where needed. */
+fun VideoClip.effectiveAnimation(): TransformAnimation {
+    fun legacy(selector: (Keyframe) -> Float): List<AnimatedKeyframe> =
+        keyframes.map { frame -> AnimatedKeyframe(frame.timeMs, selector(frame)) }.sortedBy { it.timeMs }
+
+    return animation.copy(
+        x = animation.x.ifEmpty { legacy { it.x } },
+        y = animation.y.ifEmpty { legacy { it.y } },
+        scale = animation.scale.ifEmpty { legacy { it.scale } },
+        rotation = animation.rotation.ifEmpty { legacy { it.rotation } },
+        opacity = animation.opacity.ifEmpty { legacy { it.opacity } },
+    )
+}
+
+
+/** Source length given to still images so they can be stretched freely on the timeline. */
+const val STILL_SOURCE_MS = 3_600_000L
+
+/** Playable length of an audio clip on the timeline. */
+fun AudioClip.lengthMs(): Long =
+    (if (endMs > startMs) endMs - startMs else sourceDurationMs - startMs).coerceAtLeast(250L)
+
+/** End of the last clip / audio / text on the timeline: the real project length. */
+fun EditorUiState.timelineEndMs(): Long {
+    val video = clips.maxOfOrNull { it.timelineStartMs + (it.end(durationMs) - it.startMs).coerceAtLeast(250L) } ?: 0L
+    val audio = audioClips.maxOfOrNull { it.timelineStartMs + it.lengthMs() } ?: 0L
+    val text = textOverlays.maxOfOrNull { it.endMs } ?: 0L
+    return maxOf(video, audio, text)
+}
 
 
 fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
@@ -148,5 +207,13 @@ fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
 
 fun VideoClip.keyframesAt(timelinePositionMs: Long): Keyframe {
     val local = (timelinePositionMs - timelineStartMs + startMs).coerceAtLeast(startMs)
-    return if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() || animation.opacity.isNotEmpty()) animation.at(local) else keyframes.interpolate(local)
+    return effectiveAnimation().at(local)
+}
+
+/** Canvas shape of the project (preview and export). */
+@Serializable
+enum class AspectRatio(val label: String, val w: Int, val h: Int) {
+    PORTRAIT("9:16", 9, 16),
+    LANDSCAPE("16:9", 16, 9),
+    SQUARE("1:1", 1, 1),
 }

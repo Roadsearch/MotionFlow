@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Same mark as ui/components/MotionFlowLogo.kt, scaled to the 66dp adaptive safe zone. -->
+    <path
+        android:pathData="M49.7,36.5 L33.4,36.5 L33.4,43.6 L77.2,74.1"
+        android:strokeWidth="8.2" android:strokeLineCap="butt" android:strokeLineJoin="round">
+
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="36" android:startY="72" android:endX="76" android:endY="38">
+                <item android:offset="0" android:color="#B245F5" />
+                <item android:offset="0.5" android:color="#6F96FF" />
+                <item android:offset="1" android:color="#1CE8E8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M76.9,34.7 L33.7,68.1 L33.7,72.2 L58.6,72.2 L58.6,68.1"
+        android:strokeWidth="8.2" android:strokeLineCap="butt" android:strokeLineJoin="round">
+
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="36" android:startY="72" android:endX="76" android:endY="38">
+                <item android:offset="0" android:color="#B245F5" />
+                <item android:offset="0.5" android:color="#6F96FF" />
+                <item android:offset="1" android:color="#1CE8E8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

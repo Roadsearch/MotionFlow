@@ -23,7 +23,7 @@ class MaskEffect(private val settings: MaskSettings) : GlEffect {
     }
 
     override fun isNoOp(inputWidth: Int, inputHeight: Int): Boolean =
-        !settings.enabled || (settings.x <= 0f && settings.y <= 0f && settings.width >= 1f && settings.height >= 1f && settings.feather <= 0f && settings.type == MaskType.RECTANGLE)
+        !settings.enabled || (settings.x <= 0f && settings.y <= 0f && settings.width >= 1f && settings.height >= 1f && settings.feather <= 0f && settings.type == MaskType.RECTANGLE && !settings.invert)
 }
 
 @UnstableApi
@@ -48,7 +48,7 @@ private class MaskShaderProgram(
         program.setFloatsUniform("uMaskRect", floatArrayOf(settings.x.coerceIn(0f, 1f), settings.y.coerceIn(0f, 1f), settings.width.coerceIn(0.001f, 1f), settings.height.coerceIn(0.001f, 1f)))
         program.setFloatUniform("uFeather", settings.feather.coerceIn(0f, 0.5f))
         program.setFloatUniform("uMaskType", settings.type.ordinal.toFloat())
-        program.setFloatUniform("uInvert", 0f)
+        program.setFloatUniform("uInvert", if (settings.invert) 1f else 0f)
     }
 
     override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)

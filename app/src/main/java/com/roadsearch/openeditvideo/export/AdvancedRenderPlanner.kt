@@ -20,10 +20,14 @@ object AdvancedRenderPlanner {
 
     fun decide(state: EditorUiState, ffmpegAvailable: Boolean): Decision {
         val blend = state.blendModes.filterValues { it != BlendMode.NORMAL }.values.distinct()
-        val transitions = state.transitions.filter { it.type != TransitionType.CUT }
+        val active = state.transitions.filter { it.type != TransitionType.CUT }
+        // Cross-fade and fade-through are rendered by the Media3 path (opacity ramps); wipes are not rendered at all.
+        val fades = active.filter { it.type == TransitionType.CROSS_FADE || it.type == TransitionType.FADE_THROUGH }
+        val wipes = active.filter { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }
         val reasons = buildList {
             if (blend.isNotEmpty()) add("Blend modes: ${blend.joinToString()}")
-            if (transitions.isNotEmpty()) add("Transitions: ${transitions.map { it.type }.distinct().joinToString()}")
+            if (wipes.isNotEmpty()) add("Transitions: ${wipes.map { it.type }.distinct().joinToString()}")
+            if (blend.isNotEmpty() && fades.isNotEmpty()) add("Fondus avec modes de fusion : non combinables pour l'instant")
         }
         if (reasons.isEmpty()) return Decision(Backend.MEDIA3, emptyList())
         if (!ffmpegAvailable) {
@@ -33,10 +37,10 @@ object AdvancedRenderPlanner {
                 listOf("Activez le backend FFmpeg optionnel pour les fonctions avancées non couvertes par Media3."),
             )
         }
-        // The advanced backend in V66–V75 implements blend modes and absolute-time overlays.
-        // Two-input transitions still require the dedicated programmable compositor, so do not
-        // route them to a backend that cannot actually render them.
-        if (transitions.isNotEmpty()) return Decision(Backend.UNSUPPORTED, reasons, listOf("Les transitions deux-entrées attendent le compositeur programmable."))
+        // The FFmpeg backend implements blend modes only: it must not receive projects with transitions it would drop.
+        if (wipes.isNotEmpty() || fades.isNotEmpty()) {
+            return Decision(Backend.UNSUPPORTED, reasons, listOf("Les transitions deux-entrées attendent le compositeur programmable."))
+        }
         return Decision(Backend.FFMPEG_OPTIONAL, reasons)
     }
 }

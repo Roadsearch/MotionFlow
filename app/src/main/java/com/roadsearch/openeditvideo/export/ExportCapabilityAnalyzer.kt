@@ -5,20 +5,13 @@ import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TransitionType
 import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.scene.SceneGraph
 
 /** Explicit gate for features that still require a custom compositor beyond public Media3 APIs. */
 object ExportCapabilityAnalyzer {
     fun errors(state: EditorUiState): List<String> = buildList {
-        if (state.clips.any { it.track > 0 }) {
-            add("Les pistes vidéo secondaires (V2/V3+) ne sont pas encore honorées par l'export public Media3.")
-        }
-        val primary = state.clips.filter { it.track == 0 }.sortedBy { it.timelineStartMs }
-        primary.zipWithNext().forEach { (current, next) ->
-            val currentEnd = current.timelineStartMs + TimelineMath.duration(current, state.durationMs)
-            if (next.timelineStartMs > currentEnd + TimelineMath.MIN_CLIP_DURATION_MS / 2) {
-                add("Un trou dans la piste V1 entre deux clips ne peut pas être exporté proprement.")
-            }
-        }
+        // Secondary video tracks and gaps in V1 are composited by MultiTrackCompositionFactory: one compositor input per
+        // clip over a black background input, each with its own placement, opacity and time window.
         if (state.blendModes.any { it.value != BlendMode.NORMAL } && state.clips.none { it.track == 0 }) {
             add("Un mode de fusion avancé nécessite une piste V1 de fond.")
         }
@@ -30,11 +23,16 @@ object ExportCapabilityAnalyzer {
                 if (animated || staticMoved) add("Le blend ${mode.name} du clip $id nécessite encore un blend programmable positionné; le backend avancé actuel ne sait fusionner que le plein cadre.")
             }
         }
-        state.transitions
-            .filter { it.type != TransitionType.CUT }
-            .takeIf { it.isNotEmpty() }
-            ?.let {
-                add("Transitions non-CUT : le crossfade/transition à deux entrées doit encore passer par le compositeur programmable; l'export Media3 public ne les honore pas encore de manière générale.")
-            }
+        addAll(SceneGraph.validationErrors(state.clips, state.nullObjects, state.textOverlays))
+        // Fade-through and cross-fade are represented by opacity ramps in the Media3 composition.
+        // Keep this capability gate aligned with AdvancedRenderPlanner; never silently export unsupported transitions.
+        val active = state.transitions.filter { it.type != TransitionType.CUT }
+        if (active.any { it.type == TransitionType.WIPE_LEFT || it.type == TransitionType.WIPE_RIGHT }) {
+            add("Les transitions de type volet (wipe) ne sont pas encore rendues à l'export : remplacez-les par un fondu ou une coupe.")
+        }
+        if (active.any { it.type == TransitionType.CROSS_FADE || it.type == TransitionType.FADE_THROUGH } &&
+            state.blendModes.any { it.value != BlendMode.NORMAL }) {
+            add("Les fondus enchaînés ne sont pas encore combinables avec un mode de fusion avancé.")
+        }
     }
 }

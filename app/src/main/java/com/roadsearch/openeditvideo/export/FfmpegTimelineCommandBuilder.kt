@@ -24,7 +24,11 @@ object FfmpegTimelineCommandBuilder {
             plan.transitions.filter { it.type != TransitionType.CUT }.forEach { add("transition=${it.type} ${it.durationMs}ms") }
         }
         val args = mutableListOf<String>("-y")
-        state.clips.sortedBy { it.id }.forEach { args += listOf("-i", it.uri.toString()) }
+        state.clips.sortedBy { it.id }.forEach { clip ->
+            // A photo is an endless looped image: bound it to the time it is shown.
+            if (isStill(clip)) args += listOf("-loop", "1", "-t", seconds((clip.endMs - clip.startMs).coerceAtLeast(1L)))
+            args += listOf("-i", clip.uri.toString())
+        }
         state.audioClips.sortedBy { it.id }.forEach { args += listOf("-i", it.uri.toString()) }
         args += listOf("-filter_complex", buildFilterGraph(state, plan))
         args += listOf("-map", "[vout]")
@@ -41,7 +45,8 @@ object FfmpegTimelineCommandBuilder {
             ?: error("La piste V1 est obligatoire pour le backend avancé")
         val baseIndex = indexByClip.getValue(base.clipId)
         val baseDur = seconds(base.durationMs)
-        parts += "[$baseIndex:v]trim=start=${seconds(videoClips.first { it.id == base.clipId }.startMs)}:duration=$baseDur,setpts=PTS-STARTPTS[base0]"
+        val baseClip = videoClips.first { it.id == base.clipId }
+        parts += "[$baseIndex:v]trim=start=${seconds(sourceStart(baseClip))}:duration=$baseDur,setpts=PTS-STARTPTS[base0]"
         var current = "base0"
         var nextBase = 1
         val upper = plan.layers.filter { it.clipId != base.clipId }.sortedBy { it.zIndex }
@@ -54,13 +59,13 @@ object FfmpegTimelineCommandBuilder {
             val placement = "enable='between(t,$start,$end)':eof_action=pass:shortest=0"
             if (layer.blendMode == BlendMode.NORMAL) {
                 val clip = videoClips.first { it.id == layer.clipId }
-                parts += "[$input:v]trim=start=${seconds(clip.startMs)}:duration=${seconds(layer.durationMs)},setpts=PTS-STARTPTS+$start/TB[$fg]"
+                parts += "[$input:v]trim=start=${seconds(sourceStart(clip))}:duration=${seconds(layer.durationMs)},setpts=PTS-STARTPTS+$start/TB[$fg]"
                 parts += "[$current][$fg]overlay=x=0:y=0:$placement[$label]"
             } else {
                 // FFmpeg's blend filter operates on aligned full-frame inputs; this branch intentionally
                 // uses it for full-frame advanced blending. Positioned advanced blends are rejected by the analyzer.
                 val clip = videoClips.first { it.id == layer.clipId }
-                parts += "[$input:v]trim=start=${seconds(clip.startMs)}:duration=${seconds(layer.durationMs)},setpts=PTS-STARTPTS[$fg]"
+                parts += "[$input:v]trim=start=${seconds(sourceStart(clip))}:duration=${seconds(layer.durationMs)},setpts=PTS-STARTPTS[$fg]"
                 val blend = ffmpegBlend(layer.blendMode)
                 parts += "[$current][$fg]blend=all_mode=$blend:all_opacity=1[$label]"
             }
@@ -70,7 +75,7 @@ object FfmpegTimelineCommandBuilder {
         parts += "[$current]format=yuv420p[vout]"
 
         val audioInputs = mutableListOf<String>()
-        state.clips.filter { it.track == 0 }.forEach { clip ->
+        state.clips.filter { it.track == 0 && !isStill(it) }.forEach { clip ->
             val input = indexByClip.getValue(clip.id)
             val start = seconds(clip.timelineStartMs)
             val duration = seconds((clip.endMs - clip.startMs).coerceAtLeast(0L))
@@ -104,6 +109,12 @@ object FfmpegTimelineCommandBuilder {
         BlendMode.DARKEN -> "darken"
         BlendMode.LIGHTEN -> "lighten"
     }
+
+    private fun isStill(clip: com.roadsearch.openeditvideo.model.VideoClip): Boolean =
+        clip.sourceDurationMs >= com.roadsearch.openeditvideo.model.STILL_SOURCE_MS
+
+    /** Stills have no source timeline: they always start at 0. */
+    private fun sourceStart(clip: com.roadsearch.openeditvideo.model.VideoClip): Long = if (isStill(clip)) 0L else clip.startMs
 
     private fun seconds(ms: Long): String = String.format(Locale.US, "%.6f", ms.coerceAtLeast(0L) / 1000.0)
 }
