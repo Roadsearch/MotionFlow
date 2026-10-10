@@ -25,6 +25,7 @@ import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.model.ChromaKeySettings
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.VideoClip
+import com.roadsearch.openeditvideo.model.effectiveAnimation
 import com.roadsearch.openeditvideo.model.VideoFilter
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -60,7 +61,7 @@ class MediaEngine(private val context: Context) {
 
     fun previewEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
         addAll(effects(clip.effects))
-        val animation = clip.animation
+        val animation = clip.effectiveAnimation()
         if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
             add(AnimatedTransformEffect(animation, clip.startMs))
         }
@@ -96,8 +97,14 @@ class MediaEngine(private val context: Context) {
         Effects(listOf(constantGainProcessor(clip.volume.coerceIn(0f, 2f))), buildCompositionEffects(state, clip))
 
     private fun buildCompositionEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
-        val static = clip.effects.copy(rotation = 0f)
-        addAll(GpuEffectFactory.build(static))
+        addAll(GpuEffectFactory.build(clip.effects))
+        val animation = clip.effectiveAnimation()
+        if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
+            add(AnimatedTransformEffect(animation, clip.startMs))
+        }
+        if (animation.opacity.isNotEmpty()) {
+            add(AnimatedAlphaEffect(animation.opacity, clip.startMs))
+        }
         val chroma = state.chromaKeys[clip.id]
         if (chroma?.enabled == true) add(chromaEffect(chroma))
         val mask = state.masks[clip.id]
