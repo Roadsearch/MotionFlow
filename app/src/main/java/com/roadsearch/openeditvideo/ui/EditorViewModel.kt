@@ -854,64 +854,181 @@ class EditorViewModel @Inject constructor(
         val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
             .coerceIn(clip.startMs, clip.end(state.durationMs))
         val current = clip.keyframesAt(state.positionMs)
+        val baseAnimation = clip.effectiveAnimation()
+        val addAllProperties = x == null && y == null && scale == null && rotation == null && opacity == null
         record()
 
-        fun put(list: List<AnimatedKeyframe>, value: Float, easing: Easing): List<AnimatedKeyframe> {
-            val k = AnimatedKeyframe(local, value, easing)
-            return (list.filterNot { it.timeMs == local } + k).sortedBy { it.timeMs }
+        fun put(list: List<AnimatedKeyframe>, value: Float): List<AnimatedKeyframe> {
+            val key = AnimatedKeyframe(local, value, state.easing)
+            return (list.filterNot { it.timeMs == local } + key).sortedBy { it.timeMs }
         }
 
-        val target = if (listOf(x, y, scale, rotation, opacity).all { it == null }) {
-            listOf(current.x, current.y, current.scale, current.rotation, current.opacity)
-        } else {
-            listOf(x, y, scale, rotation, opacity).mapIndexed { index, value ->
-                value ?: when (index) {
-                    0 -> current.x
-                    1 -> current.y
-                    2 -> current.scale
-                    3 -> current.rotation
-                    else -> current.opacity
-                }
-            }
-        }
+        val animation = baseAnimation.copy(
+            x = if (addAllProperties || x != null) put(baseAnimation.x, x ?: current.x) else baseAnimation.x,
+            y = if (addAllProperties || y != null) put(baseAnimation.y, y ?: current.y) else baseAnimation.y,
+            scale = if (addAllProperties || scale != null) put(baseAnimation.scale, scale ?: current.scale) else baseAnimation.scale,
+            rotation = if (addAllProperties || rotation != null) put(baseAnimation.rotation, rotation ?: current.rotation) else baseAnimation.rotation,
+            opacity = if (addAllProperties || opacity != null) put(baseAnimation.opacity, opacity ?: current.opacity) else baseAnimation.opacity,
+        )
 
         _state.update { root ->
             root.copy(clips = root.clips.map { item ->
-                if (item.id != clip.id) item else item.copy(animation = item.animation.copy(
-                    x = put(item.animation.x, target[0], state.easing),
-                    y = put(item.animation.y, target[1], state.easing),
-                    scale = put(item.animation.scale, target[2], state.easing),
-                    rotation = put(item.animation.rotation, target[3], state.easing),
-                    opacity = put(item.animation.opacity, target[4], state.easing),
-                ))
+                if (item.id == clip.id) item.copy(animation = animation, keyframes = emptyList()) else item
             })
         }
     }
 
-    fun removeKeyframeAtPlayhead() {
+    /** Applies an easing curve to the segment starting at a specific keyframe. */
+    fun updateKeyframeCurve(
+        property: AnimatedProperty,
+        keyframeTimeMs: Long,
+        easing: Easing,
+        curveX1: Float,
+        curveY1: Float,
+        curveX2: Float,
+        curveY2: Float,
+    ) {
+        val clip = _state.value.selectedClip() ?: return
+        val baseAnimation = clip.effectiveAnimation()
+        val keys = baseAnimation.keyframes(property)
+        if (keys.none { it.timeMs == keyframeTimeMs }) return
+        record()
+        val updatedKeys = keys.map { key ->
+            if (key.timeMs == keyframeTimeMs) key.copy(
+                easingToNext = easing,
+                curveX1 = curveX1.coerceIn(0f, 1f),
+                curveY1 = curveY1.coerceIn(-2f, 3f),
+                curveX2 = curveX2.coerceIn(0f, 1f),
+                curveY2 = curveY2.coerceIn(-2f, 3f),
+            ) else key
+        }
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id == clip.id) {
+                    item.copy(animation = item.effectiveAnimation().withKeyframes(property, updatedKeys), keyframes = emptyList())
+                } else item
+            })
+        }
+    }
+
+    /** Quick preset: update the active segment and the default used for newly placed keyframes. */
+    fun setSegmentEasing(property: AnimatedProperty, easing: Easing) {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
+            .coerceIn(clip.startMs, clip.end(state.durationMs))
+        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
+        val lastAtOrBefore = keys.indexOfLast { it.timeMs <= local }
+        val start = if (lastAtOrBefore == keys.lastIndex && lastAtOrBefore > 0) {
+            keys[lastAtOrBefore - 1]
+        } else {
+            keys.getOrNull(lastAtOrBefore) ?: keys.firstOrNull()
+        } ?: return
+        updateKeyframeCurve(
+            property = property,
+            keyframeTimeMs = start.timeMs,
+            easing = easing,
+            curveX1 = start.curveX1,
+            curveY1 = start.curveY1,
+            curveX2 = start.curveX2,
+            curveY2 = start.curveY2,
+        )
+    }
+
+    fun seekToPreviousKeyframe(property: AnimatedProperty) = seekToAdjacentKeyframe(property, forward = false)
+
+    fun seekToNextKeyframe(property: AnimatedProperty) = seekToAdjacentKeyframe(property, forward = true)
+
+    private fun seekToAdjacentKeyframe(property: AnimatedProperty, forward: Boolean) {
         val state = _state.value
         val clip = state.selectedClip() ?: return
         val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        val has = listOf(clip.animation.x, clip.animation.y, clip.animation.scale, clip.animation.rotation, clip.animation.opacity)
-            .any { values -> values.any { it.timeMs == local } }
-        if (!has) return
+        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
+        val target = (if (forward) keys.firstOrNull { it.timeMs > local } else keys.lastOrNull { it.timeMs < local })
+            ?: return
+        val position = (clip.timelineStartMs + target.timeMs - clip.startMs).coerceAtLeast(clip.timelineStartMs)
+        _state.update { it.copy(positionMs = position, playing = false, seekNonce = it.seekNonce + 1) }
+    }
+
+    /** Deletes one property's key at the playhead; null deletes all property keys at that time. */
+    /** True when the active property has a keyframe exactly under the playhead. */
+    fun hasKeyframeAtPlayhead(property: AnimatedProperty): Boolean {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return false
+        val local = state.positionMs - clip.timelineStartMs + clip.startMs
+        return clip.effectiveAnimation().keyframes(property).any { it.timeMs == local }
+    }
+
+    /** Alight Motion-style diamond: add at playhead, or remove the exact active-property key. */
+    fun toggleKeyframeAtPlayhead(property: AnimatedProperty) {
+        if (hasKeyframeAtPlayhead(property)) {
+            removeKeyframeAtPlayhead(property)
+            return
+        }
+        val clip = _state.value.selectedClip() ?: return
+        val current = clip.keyframesAt(_state.value.positionMs)
+        when (property) {
+            AnimatedProperty.X -> setKeyframeProperty(x = current.x)
+            AnimatedProperty.Y -> setKeyframeProperty(y = current.y)
+            AnimatedProperty.SCALE -> setKeyframeProperty(scale = current.scale)
+            AnimatedProperty.ROTATION -> setKeyframeProperty(rotation = current.rotation)
+            AnimatedProperty.OPACITY -> setKeyframeProperty(opacity = current.opacity)
+        }
+    }
+
+    /** Removes every keyframe on one property only, leaving all other tracks untouched. */
+    fun clearKeyframes(property: AnimatedProperty) {
+        val clip = _state.value.selectedClip() ?: return
+        if (clip.effectiveAnimation().keyframes(property).isEmpty()) return
         record()
-        _state.update {
-            it.copy(clips = it.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = item.animation.copy(
-                    x = item.animation.x.filterNot { it.timeMs == local },
-                    y = item.animation.y.filterNot { it.timeMs == local },
-                    scale = item.animation.scale.filterNot { it.timeMs == local },
-                    rotation = item.animation.rotation.filterNot { it.timeMs == local },
-                    opacity = item.animation.opacity.filterNot { it.timeMs == local },
-                )) else item
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id == clip.id) {
+                    item.copy(
+                        animation = item.effectiveAnimation().withKeyframes(property, emptyList()),
+                        keyframes = emptyList(),
+                    )
+                } else item
+            })
+        }
+    }
+
+    fun removeKeyframeAtPlayhead(property: AnimatedProperty? = null) {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return
+        val local = state.positionMs - clip.timelineStartMs + clip.startMs
+        val animation = clip.effectiveAnimation()
+        val tracks = property?.let { listOf(animation.keyframes(it)) }
+            ?: listOf(animation.x, animation.y, animation.scale, animation.rotation, animation.opacity)
+        if (tracks.none { values -> values.any { it.timeMs == local } }) return
+        record()
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id != clip.id) item else {
+                    val effective = item.effectiveAnimation()
+                    val updated = if (property == null) {
+                        effective.copy(
+                            x = effective.x.filterNot { it.timeMs == local },
+                            y = effective.y.filterNot { it.timeMs == local },
+                            scale = effective.scale.filterNot { it.timeMs == local },
+                            rotation = effective.rotation.filterNot { it.timeMs == local },
+                            opacity = effective.opacity.filterNot { it.timeMs == local },
+                        )
+                    } else {
+                        effective.withKeyframes(
+                            property,
+                            effective.keyframes(property).filterNot { it.timeMs == local },
+                        )
+                    }
+                    item.copy(animation = updated, keyframes = emptyList())
+                }
             })
         }
     }
 
     fun clearKeyframes() {
         val clip = _state.value.selectedClip() ?: return
-        if (clip.animation == TransformAnimation()) return
+        if (clip.animation == TransformAnimation() && clip.keyframes.isEmpty()) return
         record()
         _state.update {
             it.copy(clips = it.clips.map { item ->

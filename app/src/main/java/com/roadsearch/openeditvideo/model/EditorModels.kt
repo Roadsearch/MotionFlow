@@ -159,6 +159,21 @@ enum class Tool(val label: String) {
 fun EditorUiState.selectedClip(): VideoClip? = clips.firstOrNull { it.id == selectedClipId }
 fun VideoClip.end(durationMs: Long): Long = if (endMs > startMs) endMs else sourceDurationMs.takeIf { it > startMs } ?: durationMs
 
+/** Resolves modern per-property tracks, falling back to legacy all-properties keyframes where needed. */
+fun VideoClip.effectiveAnimation(): TransformAnimation {
+    fun legacy(selector: (Keyframe) -> Float): List<AnimatedKeyframe> =
+        keyframes.map { frame -> AnimatedKeyframe(frame.timeMs, selector(frame)) }.sortedBy { it.timeMs }
+
+    return animation.copy(
+        x = animation.x.ifEmpty { legacy { it.x } },
+        y = animation.y.ifEmpty { legacy { it.y } },
+        scale = animation.scale.ifEmpty { legacy { it.scale } },
+        rotation = animation.rotation.ifEmpty { legacy { it.rotation } },
+        opacity = animation.opacity.ifEmpty { legacy { it.opacity } },
+    )
+}
+
+
 /** Source length given to still images so they can be stretched freely on the timeline. */
 const val STILL_SOURCE_MS = 3_600_000L
 
@@ -190,7 +205,7 @@ fun List<Keyframe>.interpolate(timeMs: Long): Keyframe {
 
 fun VideoClip.keyframesAt(timelinePositionMs: Long): Keyframe {
     val local = (timelinePositionMs - timelineStartMs + startMs).coerceAtLeast(startMs)
-    return if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() || animation.opacity.isNotEmpty()) animation.at(local) else keyframes.interpolate(local)
+    return effectiveAnimation().at(local)
 }
 
 /** Canvas shape of the project (preview and export). */
