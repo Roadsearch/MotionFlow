@@ -689,6 +689,48 @@ class EditorViewModel @Inject constructor(
     }
 
     /** Deletes one property's key at the playhead; null deletes all property keys at that time. */
+    /** True when the active property has a keyframe exactly under the playhead. */
+    fun hasKeyframeAtPlayhead(property: AnimatedProperty): Boolean {
+        val state = _state.value
+        val clip = state.selectedClip() ?: return false
+        val local = state.positionMs - clip.timelineStartMs + clip.startMs
+        return clip.effectiveAnimation().keyframes(property).any { it.timeMs == local }
+    }
+
+    /** Alight Motion-style diamond: add at playhead, or remove the exact active-property key. */
+    fun toggleKeyframeAtPlayhead(property: AnimatedProperty) {
+        if (hasKeyframeAtPlayhead(property)) {
+            removeKeyframeAtPlayhead(property)
+            return
+        }
+        val clip = _state.value.selectedClip() ?: return
+        val current = clip.keyframesAt(_state.value.positionMs)
+        when (property) {
+            AnimatedProperty.X -> setKeyframeProperty(x = current.x)
+            AnimatedProperty.Y -> setKeyframeProperty(y = current.y)
+            AnimatedProperty.SCALE -> setKeyframeProperty(scale = current.scale)
+            AnimatedProperty.ROTATION -> setKeyframeProperty(rotation = current.rotation)
+            AnimatedProperty.OPACITY -> setKeyframeProperty(opacity = current.opacity)
+        }
+    }
+
+    /** Removes every keyframe on one property only, leaving all other tracks untouched. */
+    fun clearKeyframes(property: AnimatedProperty) {
+        val clip = _state.value.selectedClip() ?: return
+        if (clip.effectiveAnimation().keyframes(property).isEmpty()) return
+        record()
+        _state.update { root ->
+            root.copy(clips = root.clips.map { item ->
+                if (item.id == clip.id) {
+                    item.copy(
+                        animation = item.effectiveAnimation().withKeyframes(property, emptyList()),
+                        keyframes = emptyList(),
+                    )
+                } else item
+            })
+        }
+    }
+
     fun removeKeyframeAtPlayhead(property: AnimatedProperty? = null) {
         val state = _state.value
         val clip = state.selectedClip() ?: return
