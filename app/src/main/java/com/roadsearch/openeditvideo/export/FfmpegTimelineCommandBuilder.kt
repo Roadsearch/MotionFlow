@@ -117,8 +117,8 @@ object FfmpegTimelineCommandBuilder {
 
     /**
      * Applies trims and clip-relative fades before placing audio on the project timeline.
-     * Fade durations are bounded to the audible clip length so malformed project values cannot
-     * produce negative fade starts or ask FFmpeg to fade beyond the clip.
+     * Fade durations are bounded to the audible clip length. One lower-envelope expression keeps
+     * overlapping fades consistent with the Media3 backend rather than multiplying two ramps.
      */
     private fun audioFilterChain(
         input: Int,
@@ -136,12 +136,19 @@ object FfmpegTimelineCommandBuilder {
             "asetpts=PTS-STARTPTS",
         )
         val fadeIn = fadeInMs.coerceIn(0L, duration)
-        if (fadeIn > 0L) filters += "afade=t=in:st=0:d=${seconds(fadeIn)}"
         val fadeOut = fadeOutMs.coerceIn(0L, duration)
-        if (fadeOut > 0L) {
-            filters += "afade=t=out:st=${seconds(duration - fadeOut)}:d=${seconds(fadeOut)}"
+        // Use a single lower-envelope expression, matching AudioFadeCurve in the Media3 backend.
+        // Chaining two afade filters would multiply overlapping ramps and produce a different curve.
+        val envelopeFactors = mutableListOf("1")
+        if (fadeIn > 0L) envelopeFactors += "(t/${seconds(fadeIn)})"
+        if (fadeOut > 0L) envelopeFactors += "((${seconds(duration)}-t)/${seconds(fadeOut)})"
+        val envelope = envelopeFactors.reduce { current, factor -> "min($current,$factor)" }
+        val gain = volume.coerceIn(0f, 2f)
+        filters += if (envelopeFactors.size == 1) {
+            "volume=$gain"
+        } else {
+            "volume='$gain*max(0,$envelope)'"
         }
-        filters += "volume=${volume.coerceIn(0f, 2f)}"
         filters += "adelay=${timelineStartMs.coerceAtLeast(0L)}:all=1"
         return "[$input:a]${filters.joinToString(",")}[$label]"
     }
