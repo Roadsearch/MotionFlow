@@ -95,12 +95,10 @@ class VideoExportWorker @AssistedInject constructor(
 
     private fun createForegroundInfo(progress: Int): ForegroundInfo {
         val channelId = "video_export"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = applicationContext.getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(
-                NotificationChannel(channelId, "Export vidéo", NotificationManager.IMPORTANCE_LOW)
-            )
-        }
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(channelId, "Export vidéo", NotificationManager.IMPORTANCE_LOW)
+        )
         val bounded = progress.coerceIn(0, 100)
         val cancelPendingIntent = androidx.work.WorkManager
             .getInstance(applicationContext)

@@ -1019,13 +1019,18 @@ class EditorViewModel @Inject constructor(
     fun exportWith(settings: ExportSettings) {
         val snapshot = _state.value
         if (snapshot.clips.none { it.track == 0 }) return
-        val capabilityErrors = com.roadsearch.openeditvideo.export.ExportCapabilityAnalyzer.errors(snapshot)
-        val report = MediaSourceValidator.validate(app, snapshot.clips, snapshot.audioClips)
-        if (capabilityErrors.isNotEmpty() || !report.isValid) {
-            _state.update { it.copy(exportProgress = null, exportMessage = (capabilityErrors + report.errors).distinct().joinToString(" ")) }
-            return
-        }
+        _state.update { it.copy(exportProgress = 0f, exportMessage = "Vérification des médias…") }
         viewModelScope.launch {
+            // Probing the media (file descriptors, metadata) is I/O: keep it off the main thread.
+            val problems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val capabilityErrors = com.roadsearch.openeditvideo.export.ExportCapabilityAnalyzer.errors(snapshot)
+                val report = MediaSourceValidator.validate(app, snapshot.clips, snapshot.audioClips)
+                if (capabilityErrors.isNotEmpty() || !report.isValid) (capabilityErrors + report.errors).distinct().joinToString(" ") else null
+            }
+            if (problems != null) {
+                _state.update { it.copy(exportProgress = null, exportMessage = problems) }
+                return@launch
+            }
             try {
                 repository.save(snapshot, hydratedId ?: repository.currentId.value)
             } catch (error: Throwable) {
