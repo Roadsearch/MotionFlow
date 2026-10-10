@@ -19,14 +19,14 @@ class ExportCapabilityAnalyzerTest {
         timelineStartMs = timeline,
     )
 
-    @Test fun rejectsSecondaryVideoTrack() {
-        val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(clip(1, 0).copy(track = 1))))
-        assertTrue(errors.any { it.contains("V2/V3+") })
+    @Test fun allowsSecondaryVideoTracks() {
+        val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(clip(1, 0), clip(2, 0).copy(track = 1))))
+        assertTrue(errors.isEmpty())
     }
 
-    @Test fun rejectsTimelineGap() {
+    @Test fun allowsAGapInTheMainTrackRenderedAsBlack() {
         val errors = ExportCapabilityAnalyzer.errors(EditorUiState(clips = listOf(clip(1, 0), clip(2, 2_000))))
-        assertTrue(errors.any { it.contains("trou") })
+        assertTrue(errors.isEmpty())
     }
 
     @Test fun allowsMedia3FadeTransitionsThroughCapabilityGate() {

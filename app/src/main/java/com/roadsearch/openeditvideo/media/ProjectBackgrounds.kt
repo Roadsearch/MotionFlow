@@ -35,6 +35,18 @@ object ProjectBackgrounds {
         Preset("mint", "Menthe", listOf(0xFF00B09B.toInt(), 0xFF96C93D.toInt())),
     )
 
+    private val FILE_NAME = Regex("""bg_([a-z0-9]+)_\d+x\d+\.png""")
+
+    /** The preset a generated background file was rendered from, or null when [name] is not one of ours. */
+    fun presetOfFileName(name: String?): Preset? {
+        val id = FILE_NAME.matchEntire(name.orEmpty())?.groupValues?.get(1) ?: return null
+        return presets.firstOrNull { it.id == id }
+    }
+
+    /** Same as [presetOfFileName], restricted to files generated into our own `backgrounds` folder. */
+    fun presetOf(uri: Uri): Preset? =
+        if (uri.scheme == "file" && uri.path?.contains("/backgrounds/") == true) presetOfFileName(uri.lastPathSegment) else null
+
     /** Pixel size of the rendered image (1080p class on the long edge), exactly the ratio of [aspect]. */
     fun sizeFor(aspect: AspectRatio): Pair<Int, Int> = when (aspect) {
         AspectRatio.PORTRAIT -> 1080 to 1920

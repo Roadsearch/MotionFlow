@@ -24,4 +24,15 @@ class ProjectBackgroundsTest {
             assertEquals(w.toLong() * aspect.h, h.toLong() * aspect.w)
         }
     }
+
+    @Test fun aGeneratedFileNameMapsBackToItsPreset() {
+        assertEquals("ocean", ProjectBackgrounds.presetOfFileName("bg_ocean_1080x1920.png")?.id)
+        assertEquals("night", ProjectBackgrounds.presetOfFileName("bg_night_1920x1080.png")?.id)
+    }
+
+    @Test fun foreignOrUnknownFileNamesAreIgnored() {
+        assertEquals(null, ProjectBackgrounds.presetOfFileName("holiday.png"))
+        assertEquals(null, ProjectBackgrounds.presetOfFileName("bg_unknown_1080x1920.png"))
+        assertEquals(null, ProjectBackgrounds.presetOfFileName(null))
+    }
 }
