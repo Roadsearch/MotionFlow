@@ -150,12 +150,16 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     if (clipVolumeDialog) state.selectedClip()?.let { c -> VolumeDialog("Volume du clip", c.volume, { clipVolumeDialog = false }) { vm.setSelectedVolume(it) } }
     if (musicVolumeDialog) {
         AudioMixDialog(
-            initialVolume = state.audioClips.firstOrNull()?.volume ?: 1f,
+            initialVolume = state.audioClips.firstOrNull { it.id == state.selectedAudioId }?.volume
+                ?: state.audioClips.firstOrNull()?.volume ?: 1f,
             selectedAudio = state.audioClips.firstOrNull { it.id == state.selectedAudioId },
             onClose = { musicVolumeDialog = false },
             onApply = { volume, selected, fadeIn, fadeOut ->
-                vm.setAudioVolume(volume)
-                if (selected != null) vm.setSelectedAudioFades(fadeIn, fadeOut)
+                if (selected != null) {
+                    vm.setSelectedAudioMix(volume, fadeIn, fadeOut)
+                } else {
+                    vm.setAudioVolume(volume)
+                }
                 musicVolumeDialog = false
             },
         )

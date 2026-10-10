@@ -668,6 +668,21 @@ class EditorViewModel @Inject constructor(
         _state.update { s -> s.copy(audioClips = s.audioClips.map { it.copy(volume = value.coerceIn(0f, 2f)) }) }
     }
 
+    /** Set volume and linear fades for the selected music clip as one undoable edit. */
+    fun setSelectedAudioMix(volume: Float, fadeInMs: Long, fadeOutMs: Long) {
+        val selectedId = _state.value.selectedAudioId ?: return
+        record()
+        _state.update { s ->
+            s.copy(audioClips = s.audioClips.map { clip ->
+                if (clip.id == selectedId) clip.copy(
+                    volume = volume.coerceIn(0f, 2f),
+                    fadeInMs = fadeInMs.coerceAtLeast(0L),
+                    fadeOutMs = fadeOutMs.coerceAtLeast(0L),
+                ) else clip
+            })
+        }
+    }
+
     /** Set linear fade lengths on the selected music clip; old projects default to no fade. */
     fun setSelectedAudioFades(fadeInMs: Long, fadeOutMs: Long) {
         val selectedId = _state.value.selectedAudioId ?: return
