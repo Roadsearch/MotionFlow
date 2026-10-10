@@ -35,12 +35,11 @@ fun AnimationPanel(vm: EditorViewModel) {
     var activeProperty by remember(clip.id) { mutableStateOf(AnimatedProperty.SCALE) }
     var showCurveEditor by remember(clip.id) { mutableStateOf(false) }
     var showClearPropertyDialog by remember(clip.id) { mutableStateOf(false) }
-    val keyExistsAtPlayhead = keyframes.any { it.timeMs == sourceTime }
-
     val keyframes = clip.effectiveAnimation().keyframes(activeProperty).sortedBy { it.timeMs }
     val sourceEnd = clip.end(state.durationMs).coerceAtLeast(clip.startMs + 1L)
     val sourceTime = (state.positionMs - clip.timelineStartMs + clip.startMs)
         .coerceIn(clip.startMs, sourceEnd)
+    val keyExistsAtPlayhead = keyframes.any { it.timeMs == sourceTime }
     val lastAtOrBefore = keyframes.indexOfLast { it.timeMs <= sourceTime }
     val curveStart = if (lastAtOrBefore == keyframes.lastIndex && lastAtOrBefore > 0) keyframes[lastAtOrBefore - 1] else keyframes.getOrNull(lastAtOrBefore) ?: keyframes.firstOrNull()
 
@@ -96,29 +95,29 @@ fun AnimationPanel(vm: EditorViewModel) {
                 onClick = { vm.seekToPreviousKeyframe(activeProperty) },
                 modifier = Modifier.weight(0.8f),
             ) { Text("◂ ◆") }
-            Box(
-                modifier = Modifier
-                    .weight(1.2f)
-                    .height(44.dp)
-                    .pointerInput(clip.id, activeProperty, state.positionMs, keyExistsAtPlayhead) {
-                        detectTapGestures(
-                            onTap = { vm.toggleKeyframeAtPlayhead(activeProperty) },
-                            onLongPress = { showClearPropertyDialog = true },
-                        )
-                    },
-                contentAlignment = androidx.compose.ui.Alignment.Center,
-            ) {
-                Text(
-                    if (keyExistsAtPlayhead) "◆ Actif" else "◇ Ajouter",
-                    color = if (keyExistsAtPlayhead) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
+            OutlinedButton(
+                onClick = {
+                    val current = clip.keyframesAt(state.positionMs)
+                    when (activeProperty) {
+                        AnimatedProperty.X -> vm.setKeyframeProperty(x = current.x)
+                        AnimatedProperty.Y -> vm.setKeyframeProperty(y = current.y)
+                        AnimatedProperty.SCALE -> vm.setKeyframeProperty(scale = current.scale)
+                        AnimatedProperty.ROTATION -> vm.setKeyframeProperty(rotation = current.rotation)
+                        AnimatedProperty.OPACITY -> vm.setKeyframeProperty(opacity = current.opacity)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = !keyExistsAtPlayhead,
+            ) { Text("◆+") }
+            OutlinedButton(
+                onClick = { vm.removeKeyframeAtPlayhead(activeProperty) },
+                modifier = Modifier.weight(1f),
+                enabled = keyExistsAtPlayhead,
+            ) { Text("◆−") }
             OutlinedButton(
                 onClick = { vm.seekToNextKeyframe(activeProperty) },
                 modifier = Modifier.weight(0.8f),
             ) { Text("◆ ▸") }
-        }
 
         Spacer(Modifier.height(8.dp))
         Text("Interpolation rapide", modifier = Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.labelLarge)
