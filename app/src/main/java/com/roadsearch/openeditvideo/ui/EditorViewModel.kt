@@ -656,7 +656,12 @@ class EditorViewModel @Inject constructor(
         val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
             .coerceIn(clip.startMs, clip.end(state.durationMs))
         val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
-        val start = keys.lastOrNull { it.timeMs <= local } ?: keys.firstOrNull() ?: return
+        val lastAtOrBefore = keys.indexOfLast { it.timeMs <= local }
+        val start = if (lastAtOrBefore == keys.lastIndex && lastAtOrBefore > 0) {
+            keys[lastAtOrBefore - 1]
+        } else {
+            keys.getOrNull(lastAtOrBefore) ?: keys.firstOrNull()
+        } ?: return
         updateKeyframeCurve(
             property = property,
             keyframeTimeMs = start.timeMs,
