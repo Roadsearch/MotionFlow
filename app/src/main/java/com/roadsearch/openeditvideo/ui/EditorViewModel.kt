@@ -57,7 +57,7 @@ class EditorViewModel @Inject constructor(
 
     private var hydrated = false
     private var hydratedId: String? = null
-    private var pendingImport: Pair<Uri, String>? = null
+    private var pendingImport: Triple<Uri, String, AspectRatio?>? = null
 
     private data class Snapshot(
         val clips: List<VideoClip>,
@@ -94,7 +94,11 @@ class EditorViewModel @Inject constructor(
                 _state.value = runCatching { TimelineValidator.repair(EditorStateCodec.decode(entity.documentJson)) }.getOrNull() ?: EditorUiState()
                 hydratedId = entity.id
                 hydrated = true
-                pendingImport?.let { (uri, name) -> pendingImport = null; import(uri, name) }
+                pendingImport?.let { (uri, name, aspect) ->
+                    pendingImport = null
+                    if (aspect != null) _state.update { s -> s.copy(aspect = aspect) }
+                    import(uri, name)
+                }
             }
         }
 
@@ -188,7 +192,8 @@ class EditorViewModel @Inject constructor(
     }
 
     /** Imports [uri] as soon as the project being opened has been loaded (avoids racing the hydration). */
-    fun queueImport(uri: Uri, name: String) { pendingImport = uri to name }
+    /** Media to import as soon as the project being opened is hydrated; [aspect] optionally sets the canvas first. */
+    fun queueImport(uri: Uri, name: String, aspect: AspectRatio? = null) { pendingImport = Triple(uri, name, aspect) }
 
     /** Writes the current state immediately (call before leaving the editor; the debounced save may still be pending). */
     fun flushSave() {
@@ -224,7 +229,9 @@ class EditorViewModel @Inject constructor(
         val id = System.nanoTime()
         val context = app
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val duration = MediaProbe.durationMs(context, uri)
+            // A photo has no duration of its own: it gets a default length and the "still" source marker.
+            val still = !audioOnly && MediaProbe.isImage(context, uri)
+            val duration = if (still) STILL_DEFAULT_MS else MediaProbe.durationMs(context, uri)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
                 record()
                 _state.update { s ->
@@ -242,7 +249,7 @@ class EditorViewModel @Inject constructor(
                                 uri = uri,
                                 name = name,
                                 endMs = duration,
-                                sourceDurationMs = duration,
+                                sourceDurationMs = if (still) STILL_SOURCE_MS else duration,
                                 timelineStartMs = insertionPoint,
                             ),
                             selectedClipId = id,
@@ -655,8 +662,8 @@ class EditorViewModel @Inject constructor(
         val id = System.nanoTime()
         val context = app
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val probed = MediaProbe.durationMs(context, uri)
-            val duration = probed.takeIf { it > 0L } ?: 5_000L
+            val still = MediaProbe.isImage(context, uri)
+            val duration = if (still) STILL_DEFAULT_MS else MediaProbe.durationMs(context, uri)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
                 record()
                 _state.update { s ->
@@ -664,7 +671,7 @@ class EditorViewModel @Inject constructor(
                     s.copy(
                         clips = s.clips + VideoClip(
                             id = id, uri = uri, name = name, endMs = duration,
-                            sourceDurationMs = if (probed > 0L) duration else STILL_SOURCE_MS,
+                            sourceDurationMs = if (still) STILL_SOURCE_MS else duration,
                             track = TimelineOps.freeOverlayTrack(s.clips, start, duration, s.durationMs), timelineStartMs = start,
                         ),
                         selectedClipId = id,
@@ -1038,3 +1045,6 @@ class EditorViewModel @Inject constructor(
         return maxOf(durationMs, videoEnd, audioEnd, textEnd)
     }
 }
+
+/** Default length of a photo / background placed on the timeline. */
+private const val STILL_DEFAULT_MS = 5_000L

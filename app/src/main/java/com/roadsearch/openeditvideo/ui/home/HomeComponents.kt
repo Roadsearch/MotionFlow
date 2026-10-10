@@ -108,7 +108,7 @@ fun NewProjectButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 Spacer(Modifier.width(6.dp))
                 Text("Nouveau projet", color = Color.White, style = MaterialTheme.typography.titleLarge)
             }
-            Text("Commencer à éditer", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.bodySmall)
+            Text("Photo, vidéo ou fond", color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
