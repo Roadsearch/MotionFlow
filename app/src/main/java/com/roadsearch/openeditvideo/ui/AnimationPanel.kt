@@ -25,6 +25,7 @@ import com.roadsearch.openeditvideo.model.keyframes
 import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.model.selectedClip
 import com.roadsearch.openeditvideo.model.end
+import com.roadsearch.openeditvideo.model.effectiveAnimation
 
 @Composable
 fun AnimationPanel(vm: EditorViewModel) {
@@ -34,11 +35,12 @@ fun AnimationPanel(vm: EditorViewModel) {
     var activeProperty by remember(clip.id) { mutableStateOf(AnimatedProperty.SCALE) }
     var showCurveEditor by remember(clip.id) { mutableStateOf(false) }
 
-    val keyframes = clip.animation.keyframes(activeProperty).sortedBy { it.timeMs }
+    val keyframes = clip.effectiveAnimation().keyframes(activeProperty).sortedBy { it.timeMs }
     val sourceEnd = clip.end(state.durationMs).coerceAtLeast(clip.startMs + 1L)
     val sourceTime = (state.positionMs - clip.timelineStartMs + clip.startMs)
         .coerceIn(clip.startMs, sourceEnd)
-    val curveStart = keyframes.lastOrNull { it.timeMs <= sourceTime } ?: keyframes.firstOrNull()
+    val lastAtOrBefore = keyframes.indexOfLast { it.timeMs <= sourceTime }
+    val curveStart = if (lastAtOrBefore == keyframes.lastIndex && lastAtOrBefore > 0) keyframes[lastAtOrBefore - 1] else keyframes.getOrNull(lastAtOrBefore) ?: keyframes.firstOrNull()
 
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Row(
