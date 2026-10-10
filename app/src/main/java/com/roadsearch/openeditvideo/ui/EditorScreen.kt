@@ -148,7 +148,18 @@ fun EditorScreen(vm: EditorViewModel, onBack: () -> Unit = {}) {
     }
     if (textDialog) TextDialog({ textDialog = false }, vm::addText)
     if (clipVolumeDialog) state.selectedClip()?.let { c -> VolumeDialog("Volume du clip", c.volume, { clipVolumeDialog = false }) { vm.setSelectedVolume(it) } }
-    if (musicVolumeDialog) VolumeDialog("Volume de la musique", state.audioClips.firstOrNull()?.volume ?: 1f, { musicVolumeDialog = false }) { vm.setAudioVolume(it) }
+    if (musicVolumeDialog) {
+        AudioMixDialog(
+            initialVolume = state.audioClips.firstOrNull()?.volume ?: 1f,
+            selectedAudio = state.audioClips.firstOrNull { it.id == state.selectedAudioId },
+            onClose = { musicVolumeDialog = false },
+            onApply = { volume, selected, fadeIn, fadeOut ->
+                vm.setAudioVolume(volume)
+                if (selected != null) vm.setSelectedAudioFades(fadeIn, fadeOut)
+                musicVolumeDialog = false
+            },
+        )
+    }
 }
 
 
@@ -391,6 +402,45 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
 }
 @Composable private fun SheetTitle(t:String){Text(t,color=Color.White,style=MaterialTheme.typography.titleLarge,modifier=Modifier.padding(horizontal=20.dp,vertical=8.dp))}
 @Composable private fun SheetAction(label:String,icon:androidx.compose.ui.graphics.vector.ImageVector,onClick:()->Unit){ListItem({Text(label,color=Color.White)},leadingContent={Icon(icon,null,tint=Accent)},modifier=Modifier.clickable(onClick=onClick),colors=ListItemDefaults.colors(containerColor=Color.Transparent))}
+@Composable
+private fun AudioMixDialog(
+    initialVolume: Float,
+    selectedAudio: AudioClip?,
+    onClose: () -> Unit,
+    onApply: (volume: Float, selected: AudioClip?, fadeInMs: Long, fadeOutMs: Long) -> Unit,
+) {
+    var volume by remember { mutableFloatStateOf(initialVolume.coerceIn(0f, 2f)) }
+    var fadeIn by remember(selectedAudio?.id) { mutableFloatStateOf(selectedAudio?.fadeInMs?.toFloat() ?: 0f) }
+    var fadeOut by remember(selectedAudio?.id) { mutableFloatStateOf(selectedAudio?.fadeOutMs?.toFloat() ?: 0f) }
+    val clipLength = selectedAudio?.let {
+        (if (it.endMs > it.startMs) it.endMs - it.startMs else it.sourceDurationMs - it.startMs).coerceAtLeast(1L)
+    } ?: 10_000L
+    val maxFade = clipLength.coerceAtMost(30_000L).toFloat().coerceAtLeast(1f)
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Mixage audio") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Volume de la musique : ${(volume * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
+                Slider(value = volume, onValueChange = { volume = it }, valueRange = 0f..2f)
+                if (selectedAudio != null) {
+                    Text("Fondu d’entrée : ${(fadeIn / 1000f).let { "%.1f".format(it) }} s", style = MaterialTheme.typography.labelLarge)
+                    Slider(value = fadeIn.coerceIn(0f, maxFade), onValueChange = { fadeIn = it }, valueRange = 0f..maxFade)
+                    Text("Fondu de sortie : ${(fadeOut / 1000f).let { "%.1f".format(it) }} s", style = MaterialTheme.typography.labelLarge)
+                    Slider(value = fadeOut.coerceIn(0f, maxFade), onValueChange = { fadeOut = it }, valueRange = 0f..maxFade)
+                    Text(selectedAudio.name, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                } else {
+                    Text("Sélectionnez un clip audio dans la timeline pour régler ses fondus.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(volume, selectedAudio, fadeIn.toLong(), fadeOut.toLong()) }) { Text("Appliquer") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Annuler") } },
+    )
+}
+
 @Composable private fun TextDialog(close:()->Unit, add:(String)->Unit){var text by remember{mutableStateOf("")}; AlertDialog(onDismissRequest=close,title={Text("Ajouter un texte")},text={OutlinedTextField(text,{text=it},label={Text("Texte")},singleLine=true)},confirmButton={TextButton({add(text);close()}){Text("Ajouter")}},dismissButton={TextButton(close){Text("Annuler")}})}
 internal fun formatTime(ms:Long):String{val t=ms.coerceAtLeast(0)/1000;return "%02d:%02d".format(t/60,t%60)}
 private fun displayName(context:Context,uri:Uri):String?=context.contentResolver.query(uri,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)else null}
