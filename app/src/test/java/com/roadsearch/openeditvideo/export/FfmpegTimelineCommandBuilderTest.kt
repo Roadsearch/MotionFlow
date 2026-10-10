@@ -35,6 +35,33 @@ class FfmpegTimelineCommandBuilderTest {
         assertTrue(graph.contains("adelay=4000:all=1"))
     }
 
+    @Test fun overlappingAudioFadesUseSingleLowerEnvelope() {
+        val state = EditorUiState(
+            clips = listOf(
+                VideoClip(1, android.net.Uri.parse("file:///a.mp4"), "A", endMs = 1000, sourceDurationMs = 1000),
+            ),
+            audioClips = listOf(
+                AudioClip(
+                    id = 2,
+                    uri = android.net.Uri.parse("file:///music.wav"),
+                    name = "Short music",
+                    startMs = 0,
+                    endMs = 1000,
+                    sourceDurationMs = 1000,
+                    volume = 0.75f,
+                    timelineStartMs = 0,
+                    fadeInMs = 800,
+                    fadeOutMs = 800,
+                ),
+            ),
+            durationMs = 1000,
+        )
+        val graph = FfmpegTimelineCommandBuilder.build(state, File("/tmp/out.mp4"))
+            .args.let { args -> args[args.indexOf("-filter_complex") + 1] }
+
+        assertTrue(graph.contains("volume='0.75*max(0,min(min(1,(t/0.800000)),((1.000000-t)/0.800000)))':eval=frame"))
+    }
+
     @Test fun commandContainsTimelineInputsAndOutputs() {
         val state = EditorUiState(
             clips = listOf(
