@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.core.TimelineValidator
+import com.roadsearch.openeditvideo.media.ProjectBackgrounds
 import com.roadsearch.openeditvideo.core.editor.TimelineEditor
 import com.roadsearch.openeditvideo.core.editor.TimelineOps
 import com.roadsearch.openeditvideo.data.ProjectRepository
@@ -441,6 +442,24 @@ class EditorViewModel @Inject constructor(
         if (_state.value.aspect == aspect) return
         record()
         _state.update { it.copy(aspect = aspect) }
+        retargetBackgrounds(aspect)
+    }
+
+    /** Generated backgrounds are re-rendered at the new canvas ratio so they keep filling the frame. */
+    private fun retargetBackgrounds(aspect: AspectRatio) {
+        val generated = _state.value.clips.mapNotNull { c -> ProjectBackgrounds.presetOf(c.uri)?.let { c.uri to it } }.distinct()
+        if (generated.isEmpty()) return
+        val context = app
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val mapping = generated.associate { (old, preset) -> old to ProjectBackgrounds.uriFor(context, preset, aspect) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                // Ignore a stale result if the ratio changed again in the meantime.
+                _state.update { s ->
+                    if (s.aspect != aspect) s
+                    else s.copy(clips = s.clips.map { c -> mapping[c.uri]?.let { c.copy(uri = it) } ?: c })
+                }
+            }
+        }
     }
 
     /** Sets (or, with CUT, removes) the transition between two adjacent main-track clips. */

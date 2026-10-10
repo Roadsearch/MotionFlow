@@ -28,7 +28,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.graphicsLayer
+import com.roadsearch.openeditvideo.media.StillLook
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -423,13 +426,14 @@ private fun OverlayStill(clip: VideoClip, state: EditorUiState) {
         model = request,
         contentDescription = null,
         contentScale = ContentScale.Fit,
+        colorFilter = remember(clip.effects) { StillLook.colorMatrix(clip.effects)?.let { ColorFilter.colorMatrix(ColorMatrix(it)) } },
         modifier = Modifier.fillMaxSize().graphicsLayer {
             // Same design space as the export: a 1080x1920 canvas, +y pointing up.
             translationX = look.x / 1080f * size.width
             translationY = -look.y / 1920f * size.height
             scaleX = look.scale
             scaleY = look.scale
-            rotationZ = look.rotation
+            rotationZ = look.rotation + clip.effects.rotation
             alpha = look.opacity.coerceIn(0f, 1f)
         },
     )

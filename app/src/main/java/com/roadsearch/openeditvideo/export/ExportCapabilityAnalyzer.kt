@@ -9,16 +9,8 @@ import com.roadsearch.openeditvideo.scene.SceneGraph
 /** Explicit gate for features that still require a custom compositor beyond public Media3 APIs. */
 object ExportCapabilityAnalyzer {
     fun errors(state: EditorUiState): List<String> = buildList {
-        if (state.clips.any { it.track > 0 }) {
-            add("Les pistes vidéo secondaires (V2/V3+) ne sont pas encore honorées par l'export public Media3.")
-        }
-        val primary = state.clips.filter { it.track == 0 }.sortedBy { it.timelineStartMs }
-        primary.zipWithNext().forEach { (current, next) ->
-            val currentEnd = current.timelineStartMs + TimelineMath.duration(current, state.durationMs)
-            if (next.timelineStartMs > currentEnd + TimelineMath.MIN_CLIP_DURATION_MS / 2) {
-                add("Un trou dans la piste V1 entre deux clips ne peut pas être exporté proprement.")
-            }
-        }
+        // Secondary video tracks and gaps in V1 are composited by MultiTrackCompositionFactory: one compositor input per
+        // clip over a black background input, each with its own placement, opacity and time window.
         if (state.blendModes.any { it.value != BlendMode.NORMAL } && state.clips.none { it.track == 0 }) {
             add("Un mode de fusion avancé nécessite une piste V1 de fond.")
         }

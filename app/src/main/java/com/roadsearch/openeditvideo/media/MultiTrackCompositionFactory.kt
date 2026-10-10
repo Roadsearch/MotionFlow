@@ -111,7 +111,7 @@ class MultiTrackCompositionFactory(private val context: Context) {
         val sourceEnd = clip.startMs + clipDurationMs
         val trackMuted = state.trackStates[clip.track]?.muted == true
         val still = clip.sourceDurationMs >= STILL_SOURCE_MS
-        val trackTypes = if (!still && clip.track == 0 && !trackMuted) setOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) else setOf(C.TRACK_TYPE_VIDEO)
+        val trackTypes = if (!still && !trackMuted) setOf(C.TRACK_TYPE_VIDEO, C.TRACK_TYPE_AUDIO) else setOf(C.TRACK_TYPE_VIDEO)
         val mediaItem = if (still) {
             // Photos and generated backgrounds have no timeline of their own: Media3 needs an explicit duration.
             MediaItem.Builder().setUri(clip.uri).setImageDurationMs(clipDurationMs.coerceAtLeast(1L)).build()
