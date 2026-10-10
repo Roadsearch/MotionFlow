@@ -9,7 +9,7 @@ import org.json.JSONObject
  * Keeping the schema in a codec makes future migrations independent from the UI state class.
  */
 object EditorStateCodec {
-    private const val VERSION = 4
+    private const val VERSION = 5
 
     fun encode(state: EditorUiState): String = JSONObject().apply {
         put("version", VERSION)
@@ -43,7 +43,7 @@ object EditorStateCodec {
         require(version <= VERSION) { "Version de projet $version non prise en charge" }
         val clips = mutableListOf<VideoClip>()
         root.optJSONArray("clips")?.let { array ->
-            for (i in 0 until array.length()) clips += readClip(array.getJSONObject(i))
+            for (i in 0 until array.length()) clips += readClip(array.getJSONObject(i), version)
         }
         val audio = mutableListOf<AudioClip>()
         root.optJSONArray("audio")?.let { array ->
@@ -124,13 +124,13 @@ object EditorStateCodec {
         put("effects", effects(c.effects))
     }
 
-    private fun readClip(o: JSONObject) = VideoClip(
+    private fun readClip(o: JSONObject, version: Int) = VideoClip(
         id = o.getLong("id"), uri = Uri.parse(o.getString("uri")), name = o.optString("name", "Clip"),
         startMs = o.optLong("start", 0L), endMs = o.optLong("end", 0L),
         sourceDurationMs = o.optLong("sourceDuration", 0L).takeIf { it > 0L } ?: o.optLong("end", 0L).coerceAtLeast(o.optLong("start", 0L)),
         volume = o.optDouble("volume", 1.0).toFloat(),
         track = o.optInt("track", 0), timelineStartMs = o.optLong("timelineStart", 0L),
-        keyframes = readKeyframes(o.optJSONArray("keyframes")), animation = readAnimation(o.optJSONObject("animation")),
+        keyframes = readKeyframes(o.optJSONArray("keyframes")), animation = readAnimation(o.optJSONObject("animation"), version),
         effects = readEffects(o.optJSONObject("effects") ?: JSONObject())
     )
 
@@ -183,9 +183,56 @@ object EditorStateCodec {
     private fun animation(a: TransformAnimation) = JSONObject().apply {
         put("x", keyframes(a.x)); put("y", keyframes(a.y)); put("scale", keyframes(a.scale)); put("rotation", keyframes(a.rotation)); put("opacity", keyframes(a.opacity))
     }
-    private fun keyframes(items: List<AnimatedKeyframe>) = JSONArray().apply { items.forEach { put(JSONObject().apply { put("time",it.timeMs); put("value",it.value.toDouble()); put("easing",it.easingToNext.name) }) } }
-    private fun readAnimation(o: JSONObject?): TransformAnimation = TransformAnimation(readAnimated(o?.optJSONArray("x")),readAnimated(o?.optJSONArray("y")),readAnimated(o?.optJSONArray("scale")),readAnimated(o?.optJSONArray("rotation")),readAnimated(o?.optJSONArray("opacity")))
-    private fun readAnimated(a: JSONArray?): List<AnimatedKeyframe> = buildList { if (a != null) for (i in 0 until a.length()) { val o=a.getJSONObject(i); add(AnimatedKeyframe(o.getLong("time"),o.optDouble("value", 0.0).toFloat(),runCatching { Easing.valueOf(o.optString("easing", Easing.LINEAR.name)) }.getOrDefault(Easing.LINEAR))) } }
+    private fun keyframes(items: List<AnimatedKeyframe>) = JSONArray().apply {
+        items.forEach { frame ->
+            put(JSONObject().apply {
+                put("time", frame.timeMs)
+                put("value", frame.value.toDouble())
+                put("easing", frame.easingToNext.name)
+                put("curveX1", frame.curveX1.toDouble())
+                put("curveY1", frame.curveY1.toDouble())
+                put("curveX2", frame.curveX2.toDouble())
+                put("curveY2", frame.curveY2.toDouble())
+            })
+        }
+    }
+
+    private fun readAnimation(o: JSONObject?, version: Int): TransformAnimation = TransformAnimation(
+        readAnimated(o?.optJSONArray("x"), version),
+        readAnimated(o?.optJSONArray("y"), version),
+        readAnimated(o?.optJSONArray("scale"), version),
+        readAnimated(o?.optJSONArray("rotation"), version),
+        readAnimated(o?.optJSONArray("opacity"), version),
+    )
+
+    private fun readAnimated(a: JSONArray?, version: Int): List<AnimatedKeyframe> {
+        val parsed = buildList {
+            if (a != null) for (i in 0 until a.length()) {
+                val o = a.getJSONObject(i)
+                add(
+                    AnimatedKeyframe(
+                        timeMs = o.getLong("time"),
+                        value = o.optDouble("value", 0.0).toFloat(),
+                        easingToNext = runCatching {
+                            Easing.valueOf(o.optString("easing", Easing.LINEAR.name))
+                        }.getOrDefault(Easing.LINEAR),
+                        curveX1 = o.optDouble("curveX1", 0.25).toFloat(),
+                        curveY1 = o.optDouble("curveY1", 0.1).toFloat(),
+                        curveX2 = o.optDouble("curveX2", 0.25).toFloat(),
+                        curveY2 = o.optDouble("curveY2", 1.0).toFloat(),
+                    )
+                )
+            }
+        }
+        // Versions <= 4 evaluated the easing stored on the destination keyframe. Move it
+        // to the source keyframe so existing projects retain the same interpolation after
+        // the evaluator is corrected to use the documented "easing to next" convention.
+        return if (version <= 4) {
+            parsed.mapIndexed { index, key ->
+                key.copy(easingToNext = parsed.getOrNull(index + 1)?.easingToNext ?: Easing.LINEAR)
+            }
+        } else parsed
+    }
 
     private fun mask(m: MaskSettings) = JSONObject().apply { put("enabled",m.enabled); put("type",m.type.name); put("feather",m.feather.toDouble()); put("x",m.x.toDouble()); put("y",m.y.toDouble()); put("width",m.width.toDouble()); put("height",m.height.toDouble()) }
     private fun readMask(o: JSONObject) = MaskSettings(
