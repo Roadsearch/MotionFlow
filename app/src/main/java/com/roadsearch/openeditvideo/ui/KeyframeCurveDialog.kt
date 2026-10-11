@@ -26,14 +26,18 @@ fun KeyframeCurveDialog(
     initialY1: Float,
     initialX2: Float,
     initialY2: Float,
+    segmentIndex: Int = 0,
+    segmentCount: Int = 1,
+    onSelectSegment: (Int) -> Unit = {},
     onDismiss: () -> Unit,
     onApply: (Easing, Float, Float, Float, Float) -> Unit,
 ) {
-    var easing by remember(initialEasing) { mutableStateOf(initialEasing) }
-    var x1 by remember(initialX1) { mutableStateOf(initialX1.coerceIn(0f, 1f)) }
-    var y1 by remember(initialY1) { mutableStateOf(initialY1.coerceIn(-0.25f, 1.25f)) }
-    var x2 by remember(initialX2) { mutableStateOf(initialX2.coerceIn(0f, 1f)) }
-    var y2 by remember(initialY2) { mutableStateOf(initialY2.coerceIn(-0.25f, 1.25f)) }
+    val segmentKey = listOf(segmentIndex, initialEasing, initialX1, initialY1, initialX2, initialY2)
+    var easing by remember(segmentKey) { mutableStateOf(initialEasing) }
+    var x1 by remember(segmentKey) { mutableStateOf(initialX1.coerceIn(0f, 1f)) }
+    var y1 by remember(segmentKey) { mutableStateOf(initialY1.coerceIn(-0.25f, 1.25f)) }
+    var x2 by remember(segmentKey) { mutableStateOf(initialX2.coerceIn(0f, 1f)) }
+    var y2 by remember(segmentKey) { mutableStateOf(initialY2.coerceIn(-0.25f, 1.25f)) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -52,6 +56,14 @@ fun KeyframeCurveDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                if (segmentCount > 1) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        TextButton(onClick = { onSelectSegment(segmentIndex - 1) }, enabled = segmentIndex > 0, modifier = Modifier.heightIn(min = 48.dp)) { Text("◂ Segment") }
+                        Text("Segment ${segmentIndex + 1} / $segmentCount", style = MaterialTheme.typography.labelLarge)
+                        TextButton(onClick = { onSelectSegment(segmentIndex + 1) }, enabled = segmentIndex < segmentCount - 1, modifier = Modifier.heightIn(min = 48.dp)) { Text("Segment ▸") }
+                    }
+                }
 
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -180,7 +192,7 @@ private fun CurveValueSlider(
     }
 }
 
-private fun Easing.labelFr(): String = when (this) {
+internal fun Easing.labelFr(): String = when (this) {
     Easing.LINEAR -> "Linéaire"
     Easing.EASE_IN -> "Accélérer"
     Easing.EASE_OUT -> "Ralentir"

@@ -3,6 +3,7 @@ package com.roadsearch.openeditvideo.export
 import com.roadsearch.openeditvideo.model.BlendMode
 import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TransitionType
+import com.roadsearch.openeditvideo.scene.SceneGraph
 
 /**
  * Plans rendering without silently downgrading unsupported effects.
@@ -40,6 +41,15 @@ object AdvancedRenderPlanner {
         // The FFmpeg backend implements blend modes only: it must not receive projects with transitions it would drop.
         if (wipes.isNotEmpty() || fades.isNotEmpty()) {
             return Decision(Backend.UNSUPPORTED, reasons, listOf("Les transitions deux-entrées attendent le compositeur programmable."))
+        }
+        // The FFmpeg graph stacks full frames at (0,0): it would silently drop keyframes, static transforms and opacity.
+        val transformed = state.clips.filter { SceneGraph.transformsClip(it, state.nullObjects) }
+        if (transformed.isNotEmpty()) {
+            return Decision(
+                Backend.UNSUPPORTED,
+                reasons + "Position, échelle, rotation ou opacité (images clés ou réglages) sur ${transformed.size} clip(s) : le backend FFmpeg ne les rend pas.",
+                listOf("Retirez les animations et transformations, ou les modes de fusion avancés, pour exporter."),
+            )
         }
         return Decision(Backend.FFMPEG_OPTIONAL, reasons)
     }

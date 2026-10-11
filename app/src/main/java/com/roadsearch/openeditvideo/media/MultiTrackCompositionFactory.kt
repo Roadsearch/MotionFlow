@@ -27,7 +27,6 @@ import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.TextOverlay as TextOverlayModel
 import com.roadsearch.openeditvideo.model.STILL_SOURCE_MS
 import com.roadsearch.openeditvideo.model.VideoClip
-import com.roadsearch.openeditvideo.model.keyframesAt
 import com.roadsearch.openeditvideo.model.at
 
 /** Builds an absolute-time Media3 composition from the editable NLE timeline. */
@@ -237,16 +236,20 @@ private class TimelineVideoCompositorSettings(
                 val clip = plan.clip
                 val active = globalMs >= clip.timelineStartMs && globalMs < clip.timelineStartMs + plan.durationMs
                 if (!active) return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
-                val keyframe = com.roadsearch.openeditvideo.scene.SceneGraph.resolve(clip.keyframesAt(globalMs), clip.parentId, nullObjects, globalMs)
-                val x = (keyframe.x / (MultiTrackCompositionFactory.DEFAULT_WIDTH / 2f)).coerceIn(-1f, 1f)
-                val y = (-keyframe.y / (MultiTrackCompositionFactory.DEFAULT_HEIGHT / 2f)).coerceIn(-1f, 1f)
-                val scale = keyframe.scale.coerceIn(0.01f, 20f)
+                val overlay = ClipTransform.overlayAt(
+                    clip = clip,
+                    nullObjects = nullObjects,
+                    globalMs = globalMs,
+                    fadeFactor = plan.fades?.factor(globalMs) ?: 1f,
+                    designWidth = MultiTrackCompositionFactory.DEFAULT_WIDTH.toFloat(),
+                    designHeight = MultiTrackCompositionFactory.DEFAULT_HEIGHT.toFloat(),
+                )
                 StaticOverlaySettings.Builder()
-                    .setBackgroundFrameAnchor(x, y)
+                    .setBackgroundFrameAnchor(overlay.anchorX, overlay.anchorY)
                     .setOverlayFrameAnchor(0f, 0f)
-                    .setScale(scale, scale)
-                    .setRotationDegrees(clip.effects.rotation + keyframe.rotation)
-                    .setAlphaScale(keyframe.opacity.coerceIn(0f, 1f) * (plan.fades?.factor(globalMs) ?: 1f))
+                    .setScale(overlay.scale, overlay.scale)
+                    .setRotationDegrees(overlay.rotationDegrees)
+                    .setAlphaScale(overlay.alpha)
                     .build()
             }
             is VideoInputPlan.Text -> {

@@ -155,6 +155,8 @@ data class EditorUiState(
     val snappingEnabled: Boolean = true,
     val trackStates: Map<Int, TrackState> = emptyMap(),
     val nullObjects: List<NullObject> = emptyList(),
+    /** Runtime-only editing mode: when on, changing a property that has no keyframe yet creates its first keyframe. */
+    @kotlinx.serialization.Transient val autoKeyframe: Boolean = false,
 )
 
 @Serializable

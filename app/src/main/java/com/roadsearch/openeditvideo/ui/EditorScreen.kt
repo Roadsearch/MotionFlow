@@ -373,14 +373,14 @@ private fun ExportBanner(progress: Float?, message: String?, vm: EditorViewModel
     if (clip != null) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Keyframe · ${formatTime(localTime)}", color = Color.White, modifier = Modifier.weight(1f))
-            IconButton({ vm.setKeyframeProperty(x=keyframe.x,y=keyframe.y,scale=keyframe.scale,rotation=keyframe.rotation,opacity=keyframe.opacity) }) { Icon(Icons.Rounded.AddCircle, "Ajouter un keyframe", tint = Accent) }
-            IconButton({ vm.removeKeyframeAtPlayhead() }) { Icon(Icons.Rounded.DeleteOutline, "Supprimer", tint = Muted) }
+            IconButton({ vm.setKeyframeProperty() }) { Icon(Icons.Rounded.AddCircle, "Ajouter un keyframe sur toutes les propriétés", tint = Accent) }
+            IconButton({ vm.removeKeyframeAtPlayhead() }) { Icon(Icons.Rounded.DeleteOutline, "Supprimer les keyframes à cet instant", tint = Muted) }
         }
-        Text("Position X ${keyframe.x.roundToInt()} px", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.x, { vm.setKeyframeProperty(x=it) }, valueRange=-500f..500f, modifier=Modifier.padding(horizontal=16.dp))
-        Text("Position Y ${keyframe.y.roundToInt()} px", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.y, { vm.setKeyframeProperty(y=it) }, valueRange=-500f..500f, modifier=Modifier.padding(horizontal=16.dp))
-        Text("Échelle ${(keyframe.scale*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.scale, { vm.setKeyframeProperty(scale=it) }, valueRange=.25f..3f, modifier=Modifier.padding(horizontal=16.dp))
-        Text("Rotation ${keyframe.rotation.roundToInt()}°", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.rotation, { vm.setKeyframeProperty(rotation=it) }, valueRange=-180f..180f, modifier=Modifier.padding(horizontal=16.dp))
-        Text("Opacité ${(keyframe.opacity*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.opacity, { vm.setKeyframeProperty(opacity=it) }, valueRange=0f..1f, modifier=Modifier.padding(horizontal=16.dp))
+        Text("Position X ${keyframe.x.roundToInt()} px", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.x, { vm.setPropertyValue(AnimatedProperty.X, it, continuous = true) }, valueRange=-500f..500f, onValueChangeFinished = { vm.commitEditGesture() }, modifier=Modifier.padding(horizontal=16.dp))
+        Text("Position Y ${keyframe.y.roundToInt()} px", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.y, { vm.setPropertyValue(AnimatedProperty.Y, it, continuous = true) }, valueRange=-500f..500f, onValueChangeFinished = { vm.commitEditGesture() }, modifier=Modifier.padding(horizontal=16.dp))
+        Text("Échelle ${(keyframe.scale*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.scale, { vm.setPropertyValue(AnimatedProperty.SCALE, it, continuous = true) }, valueRange=.25f..3f, onValueChangeFinished = { vm.commitEditGesture() }, modifier=Modifier.padding(horizontal=16.dp))
+        Text("Rotation ${keyframe.rotation.roundToInt()}°", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.rotation, { vm.setPropertyValue(AnimatedProperty.ROTATION, it, continuous = true) }, valueRange=-180f..180f, onValueChangeFinished = { vm.commitEditGesture() }, modifier=Modifier.padding(horizontal=16.dp))
+        Text("Opacité ${(keyframe.opacity*100).roundToInt()}%", color=Color.White, modifier=Modifier.padding(horizontal=20.dp)); Slider(keyframe.opacity, { vm.setPropertyValue(AnimatedProperty.OPACITY, it, continuous = true) }, valueRange=0f..1f, onValueChangeFinished = { vm.commitEditGesture() }, modifier=Modifier.padding(horizontal=16.dp))
         Text("Les keyframes sont interpolés en temps réel dans la preview.", color=Muted, style=MaterialTheme.typography.labelSmall, modifier=Modifier.padding(horizontal=20.dp, vertical=4.dp))
     }
     HorizontalDivider(Modifier.padding(vertical=8.dp), color=Card)

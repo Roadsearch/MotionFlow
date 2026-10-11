@@ -9,8 +9,13 @@ import org.json.JSONObject
  * Keeping the schema in a codec makes future migrations independent from the UI state class.
  */
 object EditorStateCodec {
-    /** 9: adds editable Bézier keyframe curves while preserving groups, parenting and track metadata from V8. */
-    private const val VERSION = 9
+    /**
+     * 10: adds the static ("base") transform values used while a property has no keyframe, and persists audio fades.
+     * 9: adds editable Bézier keyframe curves while preserving groups, parenting and track metadata from V8.
+     * Older documents stay readable: every field added since is optional and defaults to the previous behaviour.
+     * A document written by a NEWER version is rejected rather than silently losing data.
+     */
+    private const val VERSION = 10
 
     fun encode(state: EditorUiState): String = JSONObject().apply {
         put("version", VERSION)
@@ -153,6 +158,7 @@ object EditorStateCodec {
         put("id", a.id); put("uri", a.uri.toString()); put("name", a.name)
         put("start", a.startMs); put("end", a.endMs); put("sourceDuration", a.sourceDurationMs)
         put("volume", a.volume.toDouble()); put("timelineStart", a.timelineStartMs)
+        put("fadeIn", a.fadeInMs); put("fadeOut", a.fadeOutMs)
         a.groupId?.let { put("group", it) }
     }
 
@@ -163,6 +169,8 @@ object EditorStateCodec {
         volume = o.optDouble("volume", 1.0).toFloat(),
         timelineStartMs = o.optLong("timelineStart", 0L),
         groupId = if (o.has("group")) o.getLong("group") else null,
+        fadeInMs = o.optLong("fadeIn", 0L).coerceAtLeast(0L),
+        fadeOutMs = o.optLong("fadeOut", 0L).coerceAtLeast(0L),
     )
 
     private fun text(t: TextOverlay) = JSONObject().apply {
@@ -223,6 +231,16 @@ object EditorStateCodec {
 
     private fun animation(a: TransformAnimation) = JSONObject().apply {
         put("x", keyframes(a.x)); put("y", keyframes(a.y)); put("scale", keyframes(a.scale)); put("rotation", keyframes(a.rotation)); put("opacity", keyframes(a.opacity))
+        // Static values only when they differ from the defaults, so untouched projects keep their previous shape.
+        val defaults = TransformAnimation()
+        if (a.baseX != defaults.baseX || a.baseY != defaults.baseY || a.baseScale != defaults.baseScale ||
+            a.baseRotation != defaults.baseRotation || a.baseOpacity != defaults.baseOpacity
+        ) {
+            put("base", JSONObject().apply {
+                put("x", a.baseX.toDouble()); put("y", a.baseY.toDouble()); put("scale", a.baseScale.toDouble())
+                put("rotation", a.baseRotation.toDouble()); put("opacity", a.baseOpacity.toDouble())
+            })
+        }
     }
     private fun keyframes(items: List<AnimatedKeyframe>) = JSONArray().apply {
         items.forEach { frame ->
@@ -238,13 +256,22 @@ object EditorStateCodec {
         }
     }
 
-    private fun readAnimation(o: JSONObject?, version: Int): TransformAnimation = TransformAnimation(
-        readAnimated(o?.optJSONArray("x"), version),
-        readAnimated(o?.optJSONArray("y"), version),
-        readAnimated(o?.optJSONArray("scale"), version),
-        readAnimated(o?.optJSONArray("rotation"), version),
-        readAnimated(o?.optJSONArray("opacity"), version),
-    )
+    private fun readAnimation(o: JSONObject?, version: Int): TransformAnimation {
+        val base = o?.optJSONObject("base")
+        val defaults = TransformAnimation()
+        return TransformAnimation(
+            x = readAnimated(o?.optJSONArray("x"), version),
+            y = readAnimated(o?.optJSONArray("y"), version),
+            scale = readAnimated(o?.optJSONArray("scale"), version),
+            rotation = readAnimated(o?.optJSONArray("rotation"), version),
+            opacity = readAnimated(o?.optJSONArray("opacity"), version),
+            baseX = base?.optDouble("x", defaults.baseX.toDouble())?.toFloat() ?: defaults.baseX,
+            baseY = base?.optDouble("y", defaults.baseY.toDouble())?.toFloat() ?: defaults.baseY,
+            baseScale = base?.optDouble("scale", defaults.baseScale.toDouble())?.toFloat() ?: defaults.baseScale,
+            baseRotation = base?.optDouble("rotation", defaults.baseRotation.toDouble())?.toFloat() ?: defaults.baseRotation,
+            baseOpacity = base?.optDouble("opacity", defaults.baseOpacity.toDouble())?.toFloat() ?: defaults.baseOpacity,
+        )
+    }
 
     private fun readAnimated(a: JSONArray?, version: Int): List<AnimatedKeyframe> {
         val parsed = buildList {

@@ -28,6 +28,20 @@ enum class AnimatedProperty(val label: String) {
     OPACITY("Opacité"),
 }
 
+/** Value of a property when it is neither animated nor explicitly set. */
+val AnimatedProperty.neutralValue: Float
+    get() = when (this) {
+        AnimatedProperty.SCALE, AnimatedProperty.OPACITY -> 1f
+        else -> 0f
+    }
+
+/** Keeps edited values inside what the renderer can represent (the compositor clamps scale to 0.01..20). */
+fun AnimatedProperty.sanitize(value: Float): Float = when (this) {
+    AnimatedProperty.OPACITY -> value.coerceIn(0f, 1f)
+    AnimatedProperty.SCALE -> value.coerceIn(0.01f, 20f)
+    else -> value
+}
+
 @Serializable
 data class AnimatedKeyframe(
     val timeMs: Long,
@@ -104,22 +118,38 @@ private fun bounceOut(t: Float): Float {
     }
 }
 
+/**
+ * Chronological lane with one keyframe per instant. Input may be unordered; when two keyframes share a
+ * time, the one stored last wins so every consumer (preview, export, UI) sees the same lane.
+ */
+fun List<AnimatedKeyframe>.normalized(): List<AnimatedKeyframe> {
+    if (size < 2) return this
+    val result = ArrayList<AnimatedKeyframe>(size)
+    for (key in sortedBy { it.timeMs }) {
+        if (result.isNotEmpty() && result[result.lastIndex].timeMs == key.timeMs) result[result.lastIndex] = key else result.add(key)
+    }
+    return result
+}
+
 fun List<AnimatedKeyframe>.valueAt(timeMs: Long, fallback: Float): Float {
     if (isEmpty()) return fallback
-    val sorted = sortedBy { it.timeMs }
+    val sorted = normalized()
     if (timeMs <= sorted.first().timeMs) return sorted.first().value
     if (timeMs >= sorted.last().timeMs) return sorted.last().value
-    val right = sorted.first { it.timeMs >= timeMs }
-    val left = sorted.last { it.timeMs <= timeMs }
-    if (right.timeMs == left.timeMs) return left.value
-    val duration = right.timeMs - left.timeMs
-    if (duration <= 0L) return right.value
-    val raw = (timeMs - left.timeMs).toFloat() / duration.toFloat()
+    // first.time < timeMs < last.time here, so a right neighbour exists and left.time <= timeMs < right.time.
+    val rightIndex = sorted.indexOfFirst { it.timeMs > timeMs }
+    val left = sorted[rightIndex - 1]
+    val right = sorted[rightIndex]
+    val raw = (timeMs - left.timeMs).toFloat() / (right.timeMs - left.timeMs).toFloat()
     // The curve belongs to the starting keyframe of this segment ("easing to next").
     val t = left.easingToNext.apply(raw, left.curveX1, left.curveY1, left.curveX2, left.curveY2)
     return left.value + (right.value - left.value) * t
 }
 
+/**
+ * Per-property keyframe lanes plus the static value used while a lane has no keyframe.
+ * A property with keyframes follows its lane; without keyframes it holds its static (base) value.
+ */
 @Serializable
 data class TransformAnimation(
     val x: List<AnimatedKeyframe> = emptyList(),
@@ -127,6 +157,11 @@ data class TransformAnimation(
     val scale: List<AnimatedKeyframe> = emptyList(),
     val rotation: List<AnimatedKeyframe> = emptyList(),
     val opacity: List<AnimatedKeyframe> = emptyList(),
+    val baseX: Float = 0f,
+    val baseY: Float = 0f,
+    val baseScale: Float = 1f,
+    val baseRotation: Float = 0f,
+    val baseOpacity: Float = 1f,
 )
 
 fun TransformAnimation.keyframes(property: AnimatedProperty): List<AnimatedKeyframe> = when (property) {
@@ -148,14 +183,45 @@ fun TransformAnimation.withKeyframes(
     AnimatedProperty.OPACITY -> copy(opacity = keyframes)
 }
 
+fun TransformAnimation.staticValue(property: AnimatedProperty): Float = when (property) {
+    AnimatedProperty.X -> baseX
+    AnimatedProperty.Y -> baseY
+    AnimatedProperty.SCALE -> baseScale
+    AnimatedProperty.ROTATION -> baseRotation
+    AnimatedProperty.OPACITY -> baseOpacity
+}
+
+fun TransformAnimation.withStaticValue(property: AnimatedProperty, value: Float): TransformAnimation = when (property) {
+    AnimatedProperty.X -> copy(baseX = value)
+    AnimatedProperty.Y -> copy(baseY = value)
+    AnimatedProperty.SCALE -> copy(baseScale = value)
+    AnimatedProperty.ROTATION -> copy(baseRotation = value)
+    AnimatedProperty.OPACITY -> copy(baseOpacity = value)
+}
+
+/** Value of one property at [timeMs]: its lane when keyframed, otherwise its static value. */
+fun TransformAnimation.value(property: AnimatedProperty, timeMs: Long): Float =
+    keyframes(property).valueAt(timeMs, staticValue(property))
+
 fun TransformAnimation.at(timeMs: Long): Keyframe = Keyframe(
     timeMs = timeMs,
-    x = x.valueAt(timeMs, 0f),
-    y = y.valueAt(timeMs, 0f),
-    scale = scale.valueAt(timeMs, 1f),
-    rotation = rotation.valueAt(timeMs, 0f),
-    opacity = opacity.valueAt(timeMs, 1f),
+    x = x.valueAt(timeMs, baseX),
+    y = y.valueAt(timeMs, baseY),
+    scale = scale.valueAt(timeMs, baseScale),
+    rotation = rotation.valueAt(timeMs, baseRotation),
+    opacity = opacity.valueAt(timeMs, baseOpacity),
 )
+
+/** True when position, scale or rotation can differ from the untransformed layer (keyframed or statically set). */
+fun TransformAnimation.hasTransform(): Boolean =
+    x.isNotEmpty() || y.isNotEmpty() || scale.isNotEmpty() || rotation.isNotEmpty() ||
+        baseX != 0f || baseY != 0f || baseScale != 1f || baseRotation != 0f
+
+/** True when opacity can differ from fully opaque (keyframed or statically set). */
+fun TransformAnimation.hasOpacity(): Boolean = opacity.isNotEmpty() || baseOpacity != 1f
+
+/** True when the animation leaves the layer exactly as imported. */
+fun TransformAnimation.isIdentity(): Boolean = !hasTransform() && !hasOpacity()
 
 @Serializable
 data class Transition(

@@ -13,8 +13,10 @@ import androidx.work.workDataOf
 import com.roadsearch.openeditvideo.core.TimelineMath
 import com.roadsearch.openeditvideo.core.TimelineValidator
 import com.roadsearch.openeditvideo.media.ProjectBackgrounds
+import com.roadsearch.openeditvideo.core.editor.KeyframeEditor
 import com.roadsearch.openeditvideo.core.editor.TimelineEditor
 import com.roadsearch.openeditvideo.core.editor.TimelineOps
+import com.roadsearch.openeditvideo.core.editor.UndoHistory
 import com.roadsearch.openeditvideo.data.ProjectRepository
 import com.roadsearch.openeditvideo.data.EditorStateCodec
 import com.roadsearch.openeditvideo.export.ExportKeys
@@ -81,8 +83,7 @@ class EditorViewModel @Inject constructor(
     )
 
     private val editor = TimelineEditor()
-    private val undoStack = ArrayDeque<Snapshot>()
-    private val redoStack = ArrayDeque<Snapshot>()
+    private val history = UndoHistory<Snapshot>(MAX_HISTORY)
 
     init {
         viewModelScope.launch {
@@ -91,7 +92,7 @@ class EditorViewModel @Inject constructor(
                 // New project: swap the whole editor state. No suspension point below, so the save pipeline
                 // always tags the restored state with the new id.
                 hydrated = false
-                undoStack.clear(); redoStack.clear()
+                history.clear()
                 _state.value = runCatching { TimelineValidator.repair(EditorStateCodec.decode(entity.documentJson)) }.fold(
                     onSuccess = { it },
                     onFailure = { error ->
@@ -170,9 +171,7 @@ class EditorViewModel @Inject constructor(
     )
 
     private fun record() {
-        undoStack.addLast(snapshot())
-        if (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
-        redoStack.clear()
+        history.record(snapshot())
     }
 
     private fun restore(s: Snapshot) {
@@ -212,21 +211,15 @@ class EditorViewModel @Inject constructor(
     }
 
     fun undo() {
-        if (undoStack.isNotEmpty()) {
-            redoStack.addLast(snapshot())
-            restore(undoStack.removeLast())
-        }
+        history.undo(snapshot())?.let { restore(it) }
     }
 
     fun redo() {
-        if (redoStack.isNotEmpty()) {
-            undoStack.addLast(snapshot())
-            restore(redoStack.removeLast())
-        }
+        history.redo(snapshot())?.let { restore(it) }
     }
 
-    fun canUndo() = undoStack.isNotEmpty()
-    fun canRedo() = redoStack.isNotEmpty()
+    fun canUndo() = history.canUndo
+    fun canRedo() = history.canRedo
 
     fun import(uri: Uri, name: String, audioOnly: Boolean = false) {
         runCatching {
@@ -322,10 +315,7 @@ class EditorViewModel @Inject constructor(
     fun commitEditGesture() { gestureOpen = false }
 
     fun cancelEditGesture() {
-        if (gestureOpen && undoStack.isNotEmpty()) {
-            restore(undoStack.removeLast())
-            redoStack.clear()
-        }
+        if (gestureOpen) history.discardLast()?.let { restore(it) }
         gestureOpen = false
     }
 
@@ -531,6 +521,10 @@ class EditorViewModel @Inject constructor(
         _state.update { s -> s.copy(markers = s.markers.filterNot { it.id == id }) }
     }
 
+    /** Moves the playhead to exactly [position] (no marker snapping), e.g. onto a keyframe. */
+    fun seekToExact(position: Long) = _state.update {
+        it.copy(positionMs = position.coerceAtLeast(0L), seekNonce = it.seekNonce + 1)
+    }
     fun seekToNextMarker() {
         val s = _state.value
         s.markers.firstOrNull { it.positionMs > s.positionMs }?.let { seekTo(it.positionMs + 1) }
@@ -879,6 +873,45 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    // ---- Keyframes: every command below delegates to the pure KeyframeEditor ----------------------------------
+
+    /**
+     * Applies a pure keyframe edit as ONE undo step (or inside the open edit gesture when [continuous]).
+     * Returns false, without touching the history, when the edit would change nothing.
+     */
+    private fun applyKeyframeEdit(continuous: Boolean = false, edit: (EditorUiState) -> EditorUiState?): Boolean {
+        if (edit(_state.value) == null) return false
+        if (continuous) beginEditGesture() else if (!gestureOpen) record()
+        _state.update { current -> edit(current) ?: current }
+        return true
+    }
+
+    /** A value edit must happen at a fixed playhead: otherwise the moving playhead would scatter keyframes. */
+    private fun pausePlayback() {
+        if (_state.value.playing) _state.update { it.copy(playing = false) }
+    }
+
+    fun setAutoKeyframe(enabled: Boolean) = _state.update { it.copy(autoKeyframe = enabled) }
+
+    /** "◆+": keyframe for [property] only, at the playhead. Refused (false) when one already exists there. */
+    fun addKeyframeAtPlayhead(property: AnimatedProperty): Boolean =
+        applyKeyframeEdit { KeyframeEditor.addKeyframe(it, property) }
+
+    /** "◆−": removes the keyframe under the playhead for [property]; null removes the ones of every property at that instant. */
+    fun removeKeyframeAtPlayhead(property: AnimatedProperty? = null): Boolean = applyKeyframeEdit {
+        if (property == null) KeyframeEditor.removeKeyframesOnAllProperties(it) else KeyframeEditor.removeKeyframe(it, property)
+    }
+
+    /**
+     * Sliders, canvas gestures and numeric fields: sets [property] following the Auto-keyframe rules.
+     * Pass [continuous] = true while a finger is down and call [commitEditGesture] when it lifts.
+     */
+    fun setPropertyValue(property: AnimatedProperty, value: Float, continuous: Boolean = false): Boolean {
+        pausePlayback()
+        return applyKeyframeEdit(continuous) { KeyframeEditor.editValue(it, property, value) }
+    }
+
+    /** Multi-property setter used by the legacy panels; no argument at all adds a keyframe on every property. */
     fun setKeyframeProperty(
         x: Float? = null,
         y: Float? = null,
@@ -886,36 +919,32 @@ class EditorViewModel @Inject constructor(
         rotation: Float? = null,
         opacity: Float? = null,
     ) {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return
-        val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
-            .coerceIn(clip.startMs, clip.end(state.durationMs))
-        val current = clip.keyframesAt(state.positionMs)
-        val baseAnimation = clip.effectiveAnimation()
-        val addAllProperties = x == null && y == null && scale == null && rotation == null && opacity == null
-        record()
-
-        fun put(list: List<AnimatedKeyframe>, value: Float): List<AnimatedKeyframe> {
-            val key = AnimatedKeyframe(local, value, state.easing)
-            return (list.filterNot { it.timeMs == local } + key).sortedBy { it.timeMs }
+        val changes = listOf(
+            AnimatedProperty.X to x,
+            AnimatedProperty.Y to y,
+            AnimatedProperty.SCALE to scale,
+            AnimatedProperty.ROTATION to rotation,
+            AnimatedProperty.OPACITY to opacity,
+        ).mapNotNull { (property, value) -> value?.let { property to it } }
+        if (changes.isEmpty()) {
+            applyKeyframeEdit { KeyframeEditor.addKeyframeOnAllProperties(it) }
+            return
         }
-
-        val animation = baseAnimation.copy(
-            x = if (addAllProperties || x != null) put(baseAnimation.x, x ?: current.x) else baseAnimation.x,
-            y = if (addAllProperties || y != null) put(baseAnimation.y, y ?: current.y) else baseAnimation.y,
-            scale = if (addAllProperties || scale != null) put(baseAnimation.scale, scale ?: current.scale) else baseAnimation.scale,
-            rotation = if (addAllProperties || rotation != null) put(baseAnimation.rotation, rotation ?: current.rotation) else baseAnimation.rotation,
-            opacity = if (addAllProperties || opacity != null) put(baseAnimation.opacity, opacity ?: current.opacity) else baseAnimation.opacity,
-        )
-
-        _state.update { root ->
-            root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = animation, keyframes = emptyList()) else item
-            })
+        pausePlayback()
+        applyKeyframeEdit { start ->
+            var result = start
+            var changed = false
+            changes.forEach { (property, value) ->
+                KeyframeEditor.editValue(result, property, value)?.let {
+                    result = it
+                    changed = true
+                }
+            }
+            result.takeIf { changed }
         }
     }
 
-    /** Applies an easing curve to the segment starting at a specific keyframe. */
+    /** Stores the curve of the segment that starts at a specific keyframe. */
     fun updateKeyframeCurve(
         property: AnimatedProperty,
         keyframeTimeMs: Long,
@@ -924,43 +953,19 @@ class EditorViewModel @Inject constructor(
         curveY1: Float,
         curveX2: Float,
         curveY2: Float,
-    ) {
-        val clip = _state.value.selectedClip() ?: return
-        val baseAnimation = clip.effectiveAnimation()
-        val keys = baseAnimation.keyframes(property)
-        if (keys.none { it.timeMs == keyframeTimeMs }) return
-        record()
-        val updatedKeys = keys.map { key ->
-            if (key.timeMs == keyframeTimeMs) key.copy(
-                easingToNext = easing,
-                curveX1 = curveX1.coerceIn(0f, 1f),
-                curveY1 = curveY1.coerceIn(-2f, 3f),
-                curveX2 = curveX2.coerceIn(0f, 1f),
-                curveY2 = curveY2.coerceIn(-2f, 3f),
-            ) else key
-        }
-        _state.update { root ->
-            root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) {
-                    item.copy(animation = item.effectiveAnimation().withKeyframes(property, updatedKeys), keyframes = emptyList())
-                } else item
-            })
-        }
+        alsoUseAsDefault: Boolean = false,
+    ): Boolean = applyKeyframeEdit {
+        KeyframeEditor.setSegmentCurve(it, property, keyframeTimeMs, easing, curveX1, curveY1, curveX2, curveY2, alsoUseAsDefault)
     }
 
-    /** Quick preset: update the active segment and the default used for newly placed keyframes. */
+    /** Quick preset: curve of the segment around the playhead plus the default for new keyframes, in one undo step. */
     fun setSegmentEasing(property: AnimatedProperty, easing: Easing) {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return
-        val local = (state.positionMs - clip.timelineStartMs + clip.startMs)
-            .coerceIn(clip.startMs, clip.end(state.durationMs))
-        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
-        val lastAtOrBefore = keys.indexOfLast { it.timeMs <= local }
-        val start = if (lastAtOrBefore == keys.lastIndex && lastAtOrBefore > 0) {
-            keys[lastAtOrBefore - 1]
-        } else {
-            keys.getOrNull(lastAtOrBefore) ?: keys.firstOrNull()
-        } ?: return
+        val start = KeyframeEditor.info(_state.value, property).segmentStart
+        if (start == null) {
+            // Fewer than two keyframes: there is no segment yet, only the default for the next keyframes changes.
+            if (_state.value.easing != easing) setEasing(easing)
+            return
+        }
         updateKeyframeCurve(
             property = property,
             keyframeTimeMs = start.timeMs,
@@ -969,6 +974,7 @@ class EditorViewModel @Inject constructor(
             curveY1 = start.curveY1,
             curveX2 = start.curveX2,
             curveY2 = start.curveY2,
+            alsoUseAsDefault = true,
         )
     }
 
@@ -976,102 +982,20 @@ class EditorViewModel @Inject constructor(
 
     fun seekToNextKeyframe(property: AnimatedProperty) = seekToAdjacentKeyframe(property, forward = true)
 
+    /** Moves the playhead exactly onto the neighbouring keyframe of [property] (visible part of the clip only). */
     private fun seekToAdjacentKeyframe(property: AnimatedProperty, forward: Boolean) {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return
-        val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        val keys = clip.effectiveAnimation().keyframes(property).sortedBy { it.timeMs }
-        val target = (if (forward) keys.firstOrNull { it.timeMs > local } else keys.lastOrNull { it.timeMs < local })
-            ?: return
-        val position = (clip.timelineStartMs + target.timeMs - clip.startMs).coerceAtLeast(clip.timelineStartMs)
-        _state.update { it.copy(positionMs = position, playing = false, seekNonce = it.seekNonce + 1) }
+        val target = KeyframeEditor.adjacentKeyframePosition(_state.value, property, forward) ?: return
+        // Not seekTo(): marker snapping could pull the playhead off the keyframe.
+        _state.update { it.copy(positionMs = target, playing = false, seekNonce = it.seekNonce + 1) }
     }
 
-    /** Deletes one property's key at the playhead; null deletes all property keys at that time. */
-    /** True when the active property has a keyframe exactly under the playhead. */
-    fun hasKeyframeAtPlayhead(property: AnimatedProperty): Boolean {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return false
-        val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        return clip.effectiveAnimation().keyframes(property).any { it.timeMs == local }
-    }
+    /** Deletes every keyframe of one property; the property keeps the value it currently shows. */
+    fun clearKeyframes(property: AnimatedProperty): Boolean =
+        applyKeyframeEdit { KeyframeEditor.clearKeyframes(it, property) }
 
-    /** Alight Motion-style diamond: add at playhead, or remove the exact active-property key. */
-    fun toggleKeyframeAtPlayhead(property: AnimatedProperty) {
-        if (hasKeyframeAtPlayhead(property)) {
-            removeKeyframeAtPlayhead(property)
-            return
-        }
-        val clip = _state.value.selectedClip() ?: return
-        val current = clip.keyframesAt(_state.value.positionMs)
-        when (property) {
-            AnimatedProperty.X -> setKeyframeProperty(x = current.x)
-            AnimatedProperty.Y -> setKeyframeProperty(y = current.y)
-            AnimatedProperty.SCALE -> setKeyframeProperty(scale = current.scale)
-            AnimatedProperty.ROTATION -> setKeyframeProperty(rotation = current.rotation)
-            AnimatedProperty.OPACITY -> setKeyframeProperty(opacity = current.opacity)
-        }
-    }
-
-    /** Removes every keyframe on one property only, leaving all other tracks untouched. */
-    fun clearKeyframes(property: AnimatedProperty) {
-        val clip = _state.value.selectedClip() ?: return
-        if (clip.effectiveAnimation().keyframes(property).isEmpty()) return
-        record()
-        _state.update { root ->
-            root.copy(clips = root.clips.map { item ->
-                if (item.id == clip.id) {
-                    item.copy(
-                        animation = item.effectiveAnimation().withKeyframes(property, emptyList()),
-                        keyframes = emptyList(),
-                    )
-                } else item
-            })
-        }
-    }
-
-    fun removeKeyframeAtPlayhead(property: AnimatedProperty? = null) {
-        val state = _state.value
-        val clip = state.selectedClip() ?: return
-        val local = state.positionMs - clip.timelineStartMs + clip.startMs
-        val animation = clip.effectiveAnimation()
-        val tracks = property?.let { listOf(animation.keyframes(it)) }
-            ?: listOf(animation.x, animation.y, animation.scale, animation.rotation, animation.opacity)
-        if (tracks.none { values -> values.any { it.timeMs == local } }) return
-        record()
-        _state.update { root ->
-            root.copy(clips = root.clips.map { item ->
-                if (item.id != clip.id) item else {
-                    val effective = item.effectiveAnimation()
-                    val updated = if (property == null) {
-                        effective.copy(
-                            x = effective.x.filterNot { it.timeMs == local },
-                            y = effective.y.filterNot { it.timeMs == local },
-                            scale = effective.scale.filterNot { it.timeMs == local },
-                            rotation = effective.rotation.filterNot { it.timeMs == local },
-                            opacity = effective.opacity.filterNot { it.timeMs == local },
-                        )
-                    } else {
-                        effective.withKeyframes(
-                            property,
-                            effective.keyframes(property).filterNot { it.timeMs == local },
-                        )
-                    }
-                    item.copy(animation = updated, keyframes = emptyList())
-                }
-            })
-        }
-    }
-
+    /** Deletes the keyframes of every property; each keeps the value it currently shows. */
     fun clearKeyframes() {
-        val clip = _state.value.selectedClip() ?: return
-        if (clip.animation == TransformAnimation() && clip.keyframes.isEmpty()) return
-        record()
-        _state.update {
-            it.copy(clips = it.clips.map { item ->
-                if (item.id == clip.id) item.copy(animation = TransformAnimation(), keyframes = emptyList()) else item
-            })
-        }
+        applyKeyframeEdit { KeyframeEditor.clearAllKeyframes(it) }
     }
 
     /** Creates a Null controller and attaches the selected video clip to it. */
@@ -1118,7 +1042,10 @@ class EditorViewModel @Inject constructor(
         return true
     }
 
-    /** Adds/updates a timeline-time transform keyframe on a Null controller. */
+    /**
+     * Adds/updates a timeline-time transform keyframe on a Null controller.
+     * Only the given properties are keyed; with no argument every property gets a keyframe at the playhead.
+     */
     fun setNullKeyframeProperty(
         id: Long,
         x: Float? = null,
@@ -1131,17 +1058,22 @@ class EditorViewModel @Inject constructor(
         val node = state.nullObjects.firstOrNull { it.id == id } ?: return
         val time = state.positionMs.coerceAtLeast(0L)
         val current = node.animation.at(time)
+        val keyAll = x == null && y == null && scale == null && rotation == null && opacity == null
         record()
 
-        fun put(list: List<AnimatedKeyframe>, value: Float, easing: Easing): List<AnimatedKeyframe> =
-            (list.filterNot { it.timeMs == time } + AnimatedKeyframe(time, value, easing)).sortedBy { it.timeMs }
+        fun put(list: List<AnimatedKeyframe>, value: Float): List<AnimatedKeyframe> {
+            val existing = list.lastOrNull { it.timeMs == time }
+            val key = existing?.copy(value = value) ?: AnimatedKeyframe(time, value, state.easing)
+            return (list.filterNot { it.timeMs == time } + key).normalized()
+        }
 
-        val animation = node.animation.copy(
-            x = put(node.animation.x, x ?: current.x, state.easing),
-            y = put(node.animation.y, y ?: current.y, state.easing),
-            scale = put(node.animation.scale, scale ?: current.scale, state.easing),
-            rotation = put(node.animation.rotation, rotation ?: current.rotation, state.easing),
-            opacity = put(node.animation.opacity, opacity ?: current.opacity, state.easing),
+        val base = node.animation
+        val animation = base.copy(
+            x = if (keyAll || x != null) put(base.x, x ?: current.x) else base.x,
+            y = if (keyAll || y != null) put(base.y, y ?: current.y) else base.y,
+            scale = if (keyAll || scale != null) put(base.scale, scale ?: current.scale) else base.scale,
+            rotation = if (keyAll || rotation != null) put(base.rotation, rotation ?: current.rotation) else base.rotation,
+            opacity = if (keyAll || opacity != null) put(base.opacity, opacity ?: current.opacity) else base.opacity,
         )
         _state.update { currentState ->
             currentState.copy(nullObjects = currentState.nullObjects.map { if (it.id == id) it.copy(animation = animation) else it })

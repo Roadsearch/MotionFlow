@@ -27,7 +27,8 @@ import com.roadsearch.openeditvideo.model.EditorUiState
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.effectiveAnimation
 import com.roadsearch.openeditvideo.model.VideoFilter
-import com.roadsearch.openeditvideo.model.keyframesAt
+import com.roadsearch.openeditvideo.model.hasOpacity
+import com.roadsearch.openeditvideo.model.hasTransform
 import com.roadsearch.openeditvideo.scene.SceneGraph
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -65,25 +66,14 @@ class MediaEngine(private val context: Context) {
         addAll(effects(clip.effects))
         val animation = clip.effectiveAnimation()
         val parents = SceneGraph.ancestors(clip.parentId, state.nullObjects)
-        val localTransformAnimated = animation.x.isNotEmpty() || animation.y.isNotEmpty() ||
-            animation.scale.isNotEmpty() || animation.rotation.isNotEmpty() ||
-            clip.keyframes.any { it.x != 0f || it.y != 0f || it.scale != 1f || it.rotation != 0f }
-        val parentTransformAnimated = parents.any { parent ->
-            val parentAnimation = parent.animation
-            parentAnimation.x.isNotEmpty() || parentAnimation.y.isNotEmpty() ||
-                parentAnimation.scale.isNotEmpty() || parentAnimation.rotation.isNotEmpty()
-        }
-        if (localTransformAnimated || parentTransformAnimated) {
+        if (animation.hasTransform() || parents.any { it.animation.hasTransform() }) {
             add(AnimatedTransformEffect(animation, clip.startMs, resolvedTransformAt = { sourceTimeMs ->
-                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
-                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs)
+                ClipTransform.resolveAtSource(clip, state.nullObjects, sourceTimeMs)
             }))
         }
-        val localOpacityAnimated = animation.opacity.isNotEmpty() || clip.keyframes.any { it.opacity != 1f }
-        if (localOpacityAnimated || parents.any { it.animation.opacity.isNotEmpty() }) {
+        if (animation.hasOpacity() || parents.any { it.animation.hasOpacity() }) {
             add(AnimatedAlphaEffect(animation.opacity, clip.startMs, resolvedOpacityAt = { sourceTimeMs ->
-                val timelineTimeMs = clip.timelineStartMs + (sourceTimeMs - clip.startMs).coerceAtLeast(0L)
-                SceneGraph.resolve(clip.keyframesAt(timelineTimeMs), clip.parentId, state.nullObjects, timelineTimeMs).opacity
+                ClipTransform.resolveAtSource(clip, state.nullObjects, sourceTimeMs).opacity
             }))
         }
 
@@ -116,13 +106,9 @@ class MediaEngine(private val context: Context) {
 
     private fun buildCompositionEffects(state: EditorUiState, clip: VideoClip): List<Effect> = buildList {
         addAll(GpuEffectFactory.build(clip.effects))
-        val animation = clip.effectiveAnimation()
-        if (animation.x.isNotEmpty() || animation.y.isNotEmpty() || animation.scale.isNotEmpty() || animation.rotation.isNotEmpty()) {
-            add(AnimatedTransformEffect(animation, clip.startMs))
-        }
-        if (animation.opacity.isNotEmpty()) {
-            add(AnimatedAlphaEffect(animation.opacity, clip.startMs))
-        }
+        // Position, scale, keyframed rotation and opacity (own keyframes or static values, parent controllers, transition
+        // fades) are applied exactly once, by TimelineVideoCompositorSettings through ClipTransform.overlayAt.
+        // Adding AnimatedTransformEffect / AnimatedAlphaEffect here would apply them a second time.
         val chroma = state.chromaKeys[clip.id]
         if (chroma?.enabled == true) add(chromaEffect(chroma))
         val mask = state.masks[clip.id]

@@ -5,6 +5,8 @@ import com.roadsearch.openeditvideo.model.NullObject
 import com.roadsearch.openeditvideo.model.VideoClip
 import com.roadsearch.openeditvideo.model.TextOverlay
 import com.roadsearch.openeditvideo.model.at
+import com.roadsearch.openeditvideo.model.effectiveAnimation
+import com.roadsearch.openeditvideo.model.isIdentity
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -39,6 +41,13 @@ object SceneGraph {
         for (node in ancestors(parentId, nulls)) acc = compose(acc, node.animation.at(timeMs), timeMs)
         return acc
     }
+
+    /**
+     * True when [clip] is moved, scaled, rotated or faded, either by its own keyframes / static values or by a parent
+     * controller. Backends that only stack full frames cannot reproduce such a clip.
+     */
+    fun transformsClip(clip: VideoClip, nulls: List<NullObject>): Boolean =
+        !clip.effectiveAnimation().isIdentity() || ancestors(clip.parentId, nulls).any { !it.animation.isIdentity() }
 
     /** One level: the child's transform (in the parent's space) expressed in the parent's parent space. */
     internal fun compose(child: Keyframe, parent: Keyframe, timeMs: Long): Keyframe {

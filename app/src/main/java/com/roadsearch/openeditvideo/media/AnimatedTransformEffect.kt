@@ -8,8 +8,9 @@ import com.roadsearch.openeditvideo.model.valueAt
 import kotlin.math.max
 
 /**
- * Time-varying Media3 transformation. The effect is evaluated for every encoded/preview frame,
- * so the same keyframe curve can drive ExoPlayer and Transformer.
+ * Time-varying Media3 transformation, evaluated for every preview frame.
+ * The preview feeds it through [resolvedTransformAt] (ClipTransform, parents included). It is NOT part of the export
+ * effect chain: the export compositor applies the same transform once, see ClipTransform.overlayAt.
  * Coordinates are expressed in the editor's 1080x1920 design space and mapped to NDC.
  */
 class AnimatedTransformEffect(
@@ -22,10 +23,10 @@ class AnimatedTransformEffect(
     override fun getMatrix(presentationTimeUs: Long): Matrix {
         val sourceTimeMs = sourceStartMs + max(0L, presentationTimeUs / 1000L)
         val resolved = resolvedTransformAt?.invoke(sourceTimeMs)
-        val x = resolved?.x ?: animation.x.valueAt(sourceTimeMs, 0f)
-        val y = resolved?.y ?: animation.y.valueAt(sourceTimeMs, 0f)
-        val scale = resolved?.scale ?: animation.scale.valueAt(sourceTimeMs, 1f)
-        val rotation = resolved?.rotation ?: animation.rotation.valueAt(sourceTimeMs, 0f)
+        val x = resolved?.x ?: animation.x.valueAt(sourceTimeMs, animation.baseX)
+        val y = resolved?.y ?: animation.y.valueAt(sourceTimeMs, animation.baseY)
+        val scale = resolved?.scale ?: animation.scale.valueAt(sourceTimeMs, animation.baseScale)
+        val rotation = resolved?.rotation ?: animation.rotation.valueAt(sourceTimeMs, animation.baseRotation)
 
         return Matrix().apply {
             // Media3 MatrixTransformation operates in normalized device coordinates.
