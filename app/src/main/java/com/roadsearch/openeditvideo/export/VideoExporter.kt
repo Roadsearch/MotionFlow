@@ -8,6 +8,7 @@ interface VideoExporter {
     suspend fun export(
         state: EditorUiState,
         output: File,
+        settings: ExportSettings = ExportSettings(),
         onProgress: (Float) -> Unit = {},
     )
 }

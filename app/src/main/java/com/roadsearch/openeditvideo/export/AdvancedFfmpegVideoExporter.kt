@@ -9,7 +9,8 @@ class AdvancedFfmpegVideoExporter(private val context: Context) : VideoExporter 
     private val bridge = ReflectiveFfmpegBridge()
     private val stager = FfmpegMediaStager(context)
 
-    override suspend fun export(state: EditorUiState, output: File, onProgress: (Float) -> Unit) {
+    /** The optional FFmpeg backend renders at the project's native settings; [settings] only apply to the Media3 path. */
+    override suspend fun export(state: EditorUiState, output: File, settings: ExportSettings, onProgress: (Float) -> Unit) {
         check(bridge.isAvailable()) {
             "Le backend FFmpeg optionnel n'est pas installé. Activez -PenableFfmpeg=true."
         }

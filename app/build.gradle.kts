@@ -90,6 +90,8 @@ dependencies {
     }
 
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for JVM unit tests (the Android stub jar only returns defaults).
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     testImplementation("androidx.work:work-testing:2.12.0")
 }
