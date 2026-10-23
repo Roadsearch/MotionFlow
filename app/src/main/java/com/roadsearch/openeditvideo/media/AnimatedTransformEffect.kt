@@ -13,6 +13,7 @@ import kotlin.math.max
  * effect chain: the export compositor applies the same transform once, see ClipTransform.overlayAt.
  * Coordinates are expressed in the editor's 1080x1920 design space and mapped to NDC.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AnimatedTransformEffect(
     private val animation: TransformAnimation,
     private val sourceStartMs: Long = 0L,

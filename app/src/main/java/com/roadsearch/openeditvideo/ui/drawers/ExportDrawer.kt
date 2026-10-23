@@ -1,6 +1,12 @@
 package com.roadsearch.openeditvideo.ui.drawers
 
 import androidx.compose.foundation.background
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.roadsearch.openeditvideo.core.TimelineValidator
 import com.roadsearch.openeditvideo.export.ExportCapabilityAnalyzer
 import androidx.compose.foundation.border
@@ -127,6 +133,10 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
     val textClashes = remember(state.textOverlays) { TimelineValidator.textOverlaps(state).size }
     val canRun = canExport && capabilityErrors.isEmpty()
     val context = LocalContext.current
+    val startExport = { vm.exportWith(settings); onClose() }
+    // Android 13+: the export runs as a foreground job whose progress notification needs this permission.
+    // It is asked when exporting; the export starts whatever the answer is.
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { startExport() }
     val resolutions = ExportResolution.entries
 
     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)) {
@@ -207,7 +217,11 @@ internal fun ExportDrawer(state: EditorUiState, vm: EditorViewModel, onClose: ()
             Caption("$textClashes texte(s) s'affichent en même temps au même endroit. Ajustez leur position ou leur durée.")
             Spacer(Modifier.height(6.dp))
         }
-        GradientButton("Exporter", enabled = canRun) { vm.exportWith(settings); onClose() }
+        GradientButton("Exporter", enabled = canRun) {
+            val needsNotificationPermission = Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            if (needsNotificationPermission) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) else startExport()
+        }
         Text(
             if (canExport) "Taille estimée : ≈ ${formatSize(settings.estimatedBytesFor(durationMs, state.aspect))}" else "Importez une vidéo pour exporter",
             color = MfColors.TextSecondary, style = MaterialTheme.typography.bodySmall,
